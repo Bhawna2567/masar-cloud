@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Masar — Curriculum Diagnostic & Skill Development</title>
+<meta name="theme-color" content="#0b6e4f">
+<meta name="description" content="UAE MOE curriculum diagnostic, gap analysis, skill plan and progress tracker for Grades 6–12.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Masar">
+<style>
+:root{
+  --green:#0b6e4f; --green-d:#085138; --gold:#c8a24a; --gold-d:#a9842f;
+  --red:#b3261e; --amber:#e6a700; --ok:#1b873f;
+  --ink:#1d2733; --muted:#5f6b7a; --line:#e3e8ef; --bg:#f5f7fa; --card:#ffffff;
+  --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.10);
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-tap-highlight-color:transparent}
+a{color:var(--green)}
+.app{max-width:1080px;margin:0 auto;padding:0 18px 90px}
+header.top{background:linear-gradient(120deg,var(--green),var(--green-d));color:#fff;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;border-radius:0 0 16px 16px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow)}
+.logo{width:42px;height:42px;border-radius:10px;background:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1d2733;font-size:20px;flex-shrink:0}
+.brand h1{margin:0;font-size:20px;letter-spacing:.3px}
+.brand p{margin:2px 0 0;font-size:12px;opacity:.85}
+#installBtn{margin-left:auto;background:var(--gold);color:#1d2733;border:none;padding:9px 14px;border-radius:10px;font-weight:800;font-size:13px;cursor:pointer;display:none}
+nav.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+nav.tabs button{border:1px solid var(--line);background:var(--card);color:var(--muted);padding:9px 14px;border-radius:999px;font-size:13px;cursor:pointer;font-weight:600;transition:.15s}
+nav.tabs button:hover{border-color:var(--green)}
+nav.tabs button.active{background:var(--green);color:#fff;border-color:var(--green)}
+nav.tabs button:disabled{opacity:.4;cursor:not-allowed}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:var(--shadow);margin-bottom:18px}
+.card h2{margin:0 0 4px;font-size:18px}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+.row{display:flex;gap:16px;flex-wrap:wrap}
+.col{flex:1;min-width:220px}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 6px;text-transform:uppercase;letter-spacing:.4px}
+input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;color:var(--ink)}
+input:focus,select:focus{outline:none;border-color:var(--green)}
+.btn{display:inline-flex;align-items:center;gap:8px;border:none;background:var(--green);color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+.btn:hover{background:var(--green-d)}
+.btn.gold{background:var(--gold);color:#1d2733}.btn.gold:hover{background:var(--gold-d)}
+.btn.ghost{background:#fff;color:var(--green);border:1px solid var(--green)}
+.btn.ghost:hover{background:#f0f6f3}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:7px 12px;font-size:12px}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.3px}
+.pill.green{background:#e5f3ec;color:var(--ok)}
+.pill.amber{background:#fdf3da;color:var(--gold-d)}
+.pill.red{background:#fbe7e6;color:var(--red)}
+.pill.grey{background:#eef1f5;color:var(--muted)}
+.q{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.q .meta{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+.q .stem{font-size:15px;font-weight:600;margin-bottom:12px}
+.opt{display:block;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font-size:14px;transition:.12s}
+.opt:hover{border-color:var(--green);background:#f6faf8}
+.opt input{width:auto;margin-right:10px}
+.opt.sel{border-color:var(--green);background:#eef7f2}
+.bar{height:10px;border-radius:6px;background:#eef1f5;overflow:hidden}
+.bar > span{display:block;height:100%;border-radius:6px;background:var(--green)}
+.kpi{display:flex;gap:14px;flex-wrap:wrap}
+.kpi .box{flex:1;min-width:140px;border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
+.kpi .box .n{font-size:26px;font-weight:800}
+.kpi .box .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.skillrow td{vertical-align:middle}
+.muted{color:var(--muted)}
+.center{text-align:center}
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty .big{font-size:42px;margin-bottom:10px}
+.folder{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.folder .fh{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;cursor:pointer;background:#fafbfc}
+.folder .fh:hover{background:#f3f6f9}
+.folder .fh .ft{font-weight:700;font-size:14px;display:flex;align-items:center;gap:10px}
+.folder .body{padding:6px 16px 14px;display:none}
+.folder.open .body{display:block}
+.task{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)}
+.task:last-child{border-bottom:none}
+.task input{width:auto;margin-top:3px}
+.task .tt{font-size:14px}
+.task .ts{font-size:12px;color:var(--muted)}
+.chartwrap{display:flex;align-items:flex-end;gap:10px;height:170px;padding:10px 0;border-bottom:1px solid var(--line)}
+.chartwrap .colbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:flex-end;height:100%}
+.chartwrap .colbar .vb{width:70%;background:var(--green);border-radius:6px 6px 0 0;transition:.4s;min-height:2px}
+.chartwrap .colbar .vb.plan{background:var(--gold)}
+.legend{display:flex;gap:16px;font-size:12px;margin-top:10px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.notice{background:#fff8e8;border:1px solid #f0e2b8;border-radius:10px;padding:12px 14px;font-size:13px;color:#7a5d00;margin-bottom:16px}
+.flex-between{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tag{font-size:11px;background:#eef1f5;color:var(--muted);padding:2px 8px;border-radius:6px;font-weight:700}
+.termtag{font-size:10px;background:#eef7f2;color:var(--green);border:1px solid #cfe6da;padding:1px 6px;border-radius:5px;font-weight:700;margin-right:6px}
+.print-only{display:none}
+#exModal .ovl{position:fixed;inset:0;background:rgba(16,24,40,.55);display:flex;align-items:flex-start;justify-content:center;padding:20px;z-index:100;overflow:auto}
+#exModal .ex{background:#fff;max-width:780px;width:100%;border-radius:16px;box-shadow:0 12px 48px rgba(0,0,0,.28);padding:22px;margin:auto}
+.exq{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.opt.exok{border-color:var(--ok);background:#e5f3ec}
+.opt.exbad{border-color:var(--red);background:#fbe7e6}
+@media print{nav.tabs,header.top .brand p,#installBtn,.no-print{display:none!important}.app{padding:0}.print-only{display:block}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">م</div>
+  <div class="brand">
+    <h1>Masar <span style="font-weight:400;opacity:.8;font-size:14px">مسار</span></h1>
+    <p>UAE MOE Curriculum Diagnostic &amp; Skill Development · Grades 6–12 · English &amp; Math</p>
+  </div>
+  <div id="userChip" style="margin-left:auto;display:flex;gap:8px;align-items:center"></div>
+  <button id="installBtn">⤓ Install app</button>
+</header>
+
+<div class="app">
+  <nav class="tabs" id="tabs"></nav>
+  <div id="view"></div>
+</div>
+
+<div id="exModal" style="display:none"></div>
+<!-- Curriculum data (auto-generated from the official MOE files). Replace this file to extend. -->
+<script src="curriculum.js"></script>
+<script src="questions.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+/* ============================================================
+   MASAR — app logic; curriculum lives in curriculum.js.
+   ============================================================ */
+if (typeof CURRICULUM === "undefined") { window.CURRICULUM = {}; }
+if (typeof WRITING_PROMPTS === "undefined") { var WRITING_PROMPTS = {}; }
+
+const GRADES = [
+  {id:"6",label:"Grade 6"},{id:"7",label:"Grade 7"},{id:"8",label:"Grade 8"},
+  {id:"9A",label:"Grade 9 Advanced"},{id:"9G",label:"Grade 9 General"},
+  {id:"10A",label:"Grade 10 Advanced"},{id:"10G",label:"Grade 10 General"},
+  {id:"11A",label:"Grade 11 Advanced"},{id:"11G",label:"Grade 11 General"},
+  {id:"12A",label:"Grade 12 Advanced"},{id:"12G",label:"Grade 12 General"}
+];
+const ENG_SKILLS = ["Reading","Writing","Vocabulary","Grammar"];
+const MATH_SKILLS = ["Number & Operations","Algebra","Geometry","Data & Probability"];
+
+if (typeof QUESTION_BANK === "undefined") { var QUESTION_BANK = {}; }
+
+/* ---- Firebase Auth + Firestore data layer (cloud) ---- */
+try{ firebase.initializeApp(firebaseConfig); }catch(e){ console.warn("Firebase init:",e); }
+const fbAuth=firebase.auth(), db=firebase.firestore();
+let AUTH=null, CACHE={assignments:[]}, _unsub=[];
+function lsGet(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
+function lsSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function assignments(){return CACHE.assignments;}
+function freshState(){return {student:null,answers:{},result:null,plan:null,taskDone:{},writeResponse:"",activeTab:"home",authMode:"login"};}
+function stateKey(){return "masar_cloud_state_"+(AUTH?AUTH.uid:"guest");}
+let S=freshState();
+function load(){return lsGet(stateKey(),null);}
+function save(){ if(AUTH&&AUTH.role==="student"){ lsSet(stateKey(),S); syncResultToAssignment(); } }
+function loadStateForUser(){S=load()||freshState();}
+function reset(){ if(confirm("Clear this student's progress on this device and start over?")){ localStorage.removeItem(stateKey()); S=freshState(); render(); } }
+function syncResultToAssignment(){
+  if(!(AUTH&&AUTH.role==="student")||!S.result||!S.activeAssignment) return;
+  const r=S.result;
+  db.collection("assignments").doc(S.activeAssignment).set({status:"completed",score:r.overallPct,level:r.level?r.level.name:"",levelCls:r.level?r.level.cls:"grey",skillPct:r.skillPct||{},subject:S.student.subject,writePrompt:r.writePrompt||"",writeResponse:r.writeResponse||"",completedAt:Date.now()},{merge:true}).catch(e=>console.warn("sync result:",e));
+}
+function startListeners(){
+  _unsub.forEach(u=>{try{u()}catch(e){}}); _unsub=[];
+  if(AUTH.role==="teacher"){
+    _unsub.push(db.collection("assignments").where("teacherUid","==",AUTH.uid).onSnapshot(s=>{CACHE.assignments=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
+    _unsub.push(db.collection("users").doc(AUTH.uid).onSnapshot(d=>{ if(d.exists){ AUTH=Object.assign({},AUTH,d.data(),{uid:AUTH.uid}); render(); } }, e=>console.warn(e)));
+  } else {
+    _unsub.push(db.collection("assignments").where("studentEmail","==",AUTH.email).onSnapshot(s=>{CACHE.assignments=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
+  }
+}
+
+const gLabel = id => (GRADES.find(g=>g.id===id)||{}).label||id;
+const skillsFor = subj => subj==="Math"?MATH_SKILLS:ENG_SKILLS;
+function levelFromPct(p){ if(p>=80)return{name:"On Track / Advanced",cls:"green"}; if(p>=60)return{name:"Approaching",cls:"amber"}; if(p>=40)return{name:"Developing",cls:"amber"}; return{name:"Needs Intensive Support",cls:"red"}; }
+function rag(p){ return p>=80?"green":p>=55?"amber":"red"; }
+function curriculumFor(grade, subj, skill){
+  let out=[];
+  ["1","2","3"].forEach(t=>{
+    const arr=(CURRICULUM[grade]&&CURRICULUM[grade][t]&&CURRICULUM[grade][t][subj]&&CURRICULUM[grade][t][subj][skill])||[];
+    arr.forEach(x=>{ if(x && !x.startsWith("(Upload")) out.push({term:t,text:x}); });
+  });
+  return out;
+}
+
+const TABS=[
+  {id:"home",label:"🏠 My Dashboard",always:true},
+  {id:"setup",label:"1 · Student Setup",always:true},
+  {id:"diagnostic",label:"2 · Diagnostic Test",need:"student"},
+  {id:"results",label:"3 · Level & Results",need:"result"},
+  {id:"gaps",label:"4 · Gap Analysis",need:"result"},
+  {id:"report",label:"5 · Parent/Teacher Report",need:"result"},
+  {id:"plan",label:"6 · Skill Development Plan",need:"result"},
+  {id:"folders",label:"7 · Weekly Folders",need:"plan"},
+  {id:"tracker",label:"8 · Progress Tracker",need:"plan"},
+  {id:"curriculum",label:"📚 Curriculum",need:"student"}
+];
+function tabEnabled(t){ if(t.always)return true; if(t.need==="student")return !!S.student; if(t.need==="result")return !!S.result; if(t.need==="plan")return !!S.plan; return true; }
+function renderTabs(){
+  const el=document.getElementById("tabs"); el.innerHTML="";
+  TABS.forEach(t=>{
+    const b=document.createElement("button");
+    b.textContent=t.label; b.disabled=!tabEnabled(t);
+    if(S.activeTab===t.id)b.classList.add("active");
+    b.onclick=()=>{S.activeTab=t.id;save();render();};
+    el.appendChild(b);
+  });
+  const rb=document.createElement("button");rb.textContent="↺ Reset";rb.className="no-print";rb.onclick=reset;rb.style.marginLeft="auto";el.appendChild(rb);
+}
+
+function render(){
+  const chip=document.getElementById("userChip");
+  if(chip){ chip.innerHTML = AUTH?`<span class="pill ${AUTH.role==='teacher'?'amber':'green'}">${AUTH.role==='teacher'?'Teacher':'Student'}</span><span style="color:#fff;font-size:13px;font-weight:600">${(AUTH.name||'').split(' ')[0]}</span><button class="btn ghost sm" onclick="logout()">Log out</button>`:""; }
+  const tabsEl=document.getElementById("tabs"); const v=document.getElementById("view");
+  if(!AUTH){ tabsEl.innerHTML=""; v.innerHTML=viewAuth(); window.scrollTo(0,0); return; }
+  if(AUTH.role==="teacher"){ tabsEl.innerHTML=""; v.innerHTML=viewTeacher(); window.scrollTo(0,0); return; }
+  renderTabs();
+  const map={home:viewHome,setup:viewSetup,diagnostic:viewDiagnostic,results:viewResults,gaps:viewGaps,report:viewReport,plan:viewPlan,folders:viewFolders,tracker:viewTracker,curriculum:viewCurriculum};
+  if(!tabEnabled(TABS.find(t=>t.id===S.activeTab))){S.activeTab="home";}
+  v.innerHTML=(map[S.activeTab]||viewHome)();
+  window.scrollTo(0,0);
+}
+
+/* ===== AUTH + DASHBOARDS (cloud) ===== */
+function viewAuth(){
+  const mode=S.authMode||"login";
+  return `<div class="card" style="max-width:460px;margin:28px auto">
+    <div style="text-align:center;margin-bottom:6px"><div style="font-size:30px;color:var(--green);font-weight:800">مسار · Masar</div><p class="muted" style="font-size:12px;margin:2px 0 0">Curriculum Diagnostic &amp; Skill Development</p></div>
+    <div style="display:flex;gap:6px;margin:14px 0">
+      <button class="btn ${mode==='login'?'':'ghost'} sm" style="flex:1" onclick="setAuthMode('login')">Log in</button>
+      <button class="btn ${mode==='register'?'':'ghost'} sm" style="flex:1" onclick="setAuthMode('register')">Register</button>
+    </div>
+    ${mode==='register'?`<label>I am a…</label>
+      <select id="a_role"><option value="teacher">Teacher</option><option value="student">Student</option></select>
+      <div style="height:10px"></div>
+      <label>Full name</label><input id="a_name" placeholder="e.g. Sara Al Hashimi"><div style="height:10px"></div>`:""}
+    <label>School email</label><input id="a_email" type="email" placeholder="name@school.ae"><div style="height:10px"></div>
+    <label>Password</label><input id="a_pass" type="password" placeholder="at least 6 characters" onkeydown="if(event.key==='Enter'){${mode==='register'?'doRegister':'doLogin'}()}">
+    <div id="authMsg" style="font-size:12px;color:var(--red);margin-top:8px"></div>
+    <div style="margin-top:14px"><button class="btn" style="width:100%" onclick="${mode==='register'?'doRegister':'doLogin'}()">${mode==='register'?'Create account':'Log in'}</button></div>
+    <p class="muted" style="font-size:11px;margin-top:12px">Accounts are stored securely in the cloud — teachers and students can log in from any device.</p>
+  </div>`;
+}
+function setAuthMode(m){S.authMode=m; render();}
+function fbErr(e){ const c=(e&&e.code)||""; if(c.indexOf("email-already-in-use")>=0)return "An account with this email already exists — try logging in."; if(c.indexOf("wrong-password")>=0||c.indexOf("invalid-credential")>=0)return "Wrong email or password."; if(c.indexOf("user-not-found")>=0)return "No account found — try registering."; if(c.indexOf("invalid-email")>=0)return "Enter a valid email address."; if(c.indexOf("weak-password")>=0)return "Password too weak (at least 6 characters)."; if(c.indexOf("network")>=0)return "Network error — check your connection."; if(c.indexOf("configuration")>=0||c.indexOf("api-key")>=0)return "App not connected to Firebase yet (check firebase-config.js)."; return (e&&e.message)||"Something went wrong."; }
+function doRegister(){
+  const role=document.getElementById("a_role").value, name=document.getElementById("a_name").value.trim();
+  const email=document.getElementById("a_email").value.trim().toLowerCase(), pass=document.getElementById("a_pass").value;
+  const msg=document.getElementById("authMsg");
+  if(!name||!email||!pass){msg.textContent="Please fill in all fields.";return;}
+  if(pass.length<6){msg.textContent="Password must be at least 6 characters.";return;}
+  msg.textContent="Creating account…";
+  fbAuth.createUserWithEmailAndPassword(email,pass)
+    .then(cred=>db.collection("users").doc(cred.user.uid).set({role:role,name:name,email:email,students:[]}))
+    .catch(e=>{const m=document.getElementById("authMsg"); if(m)m.textContent=fbErr(e);});
+}
+function doLogin(){
+  const email=document.getElementById("a_email").value.trim().toLowerCase(), pass=document.getElementById("a_pass").value;
+  const msg=document.getElementById("authMsg"); msg.textContent="Logging in…";
+  fbAuth.signInWithEmailAndPassword(email,pass).catch(e=>{const m=document.getElementById("authMsg"); if(m)m.textContent=fbErr(e);});
+}
+function logout(){ fbAuth.signOut(); }
+function viewTeacher(){
+  const me=AUTH, as=assignments(), roster=me.students||[];
+  const grades=GRADES.map(g=>`<option value="${g.id}">${g.label}</option>`).join("");
+  const rosterRows=roster.length?roster.map(s=>{
+    const sa=as.filter(a=>a.studentEmail===s.email), done=sa.filter(a=>a.status==="completed");
+    const last=done.slice().sort((a,b)=>(b.completedAt||0)-(a.completedAt||0))[0];
+    return `<tr><td><b>${s.name}</b><div class="muted" style="font-size:11px">${s.email}</div></td>
+      <td>${sa.length} assigned · ${done.length} done</td>
+      <td>${last?`${last.score}% · ${last.level||""}`:"—"}</td>
+      <td>${last?`<button class="btn ghost sm" onclick="showAssignmentResult('${last.id}')">View</button>`:""}</td></tr>`;
+  }).join(""):`<tr><td colspan="4" class="muted">No students yet — add one below.</td></tr>`;
+  const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
+  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${a.subject}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td></tr>`).join(""):`<tr><td colspan="4" class="muted">Nothing assigned yet.</td></tr>`;
+  return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
+  <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
+    <table><thead><tr><th>Student</th><th>Diagnostics</th><th>Latest result</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
+    <h3 style="font-size:14px;margin:18px 0 6px">Add a student</h3>
+    <div class="row"><div class="col"><label>Name</label><input id="t_sname" placeholder="Student name"></div>
+      <div class="col"><label>School email</label><input id="t_semail" type="email" placeholder="student@school.ae"></div></div>
+    <div style="margin-top:12px"><button class="btn" onclick="addStudent()">+ Add student</button> <span id="tmsg" style="font-size:12px;color:var(--red)"></span></div>
+  </div>
+  <div class="card"><h2>Assign &amp; share a diagnostic</h2><p class="sub">Pick a student and the test — it appears on their dashboard the moment they log in.</p>
+    ${roster.length?`<div class="row">
+      <div class="col"><label>Student</label><select id="as_student">${studentOpts}</select></div>
+      <div class="col"><label>Subject</label><select id="as_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div></div>
+    <div class="row" style="margin-top:10px">
+      <div class="col"><label>Diagnostic grade (previous)</label><select id="as_prev">${grades}</select></div>
+      <div class="col"><label>Current grade</label><select id="as_cur">${grades}</select></div></div>
+    <div style="margin-top:12px"><button class="btn gold" onclick="assignDiagnostic()">Assign &amp; share</button> <span id="amsg" style="font-size:12px;color:var(--ok)"></span></div>`:`<p class="muted">Add a student first.</p>`}
+  </div>
+  <div class="card"><h2>Assigned diagnostics</h2><table><thead><tr><th>Student</th><th>Subject</th><th>Grades</th><th>Status</th></tr></thead><tbody>${assignRows}</tbody></table></div>`;
+}
+function addStudent(){
+  const name=document.getElementById("t_sname").value.trim(), email=document.getElementById("t_semail").value.trim().toLowerCase();
+  const msg=document.getElementById("tmsg");
+  if(!name||!email){msg.textContent="Enter a name and email.";return;}
+  if((AUTH.students||[]).find(s=>s.email===email)){msg.textContent="That student is already on your list.";return;}
+  db.collection("users").doc(AUTH.uid).update({students:firebase.firestore.FieldValue.arrayUnion({name:name,email:email})}).catch(e=>{const m=document.getElementById("tmsg"); if(m)m.textContent=fbErr(e);});
+}
+function assignDiagnostic(){
+  const studentEmail=document.getElementById("as_student").value, subject=document.getElementById("as_subject").value;
+  const prevGrade=document.getElementById("as_prev").value, curGrade=document.getElementById("as_cur").value;
+  const s=(AUTH.students||[]).find(x=>x.email===studentEmail);
+  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:subject,prevGrade:prevGrade,curGrade:curGrade,status:"pending",createdAt:Date.now()})
+    .then(()=>{const m=document.getElementById("amsg"); if(m)m.textContent="Assigned! It is now on the student's dashboard.";})
+    .catch(e=>{const m=document.getElementById("amsg"); if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
+}
+function showAssignmentResult(id){
+  const a=assignments().find(x=>x.id===id); const m=document.getElementById("exModal");
+  if(!a||a.status!=="completed"){ m.innerHTML=`<div class="ovl"><div class="ex"><div class="flex-between"><h2 style="margin:0">No result yet</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div><p class="muted">This test hasn't been completed yet.</p></div></div>`; m.style.display="block"; return; }
+  const areas=(a.subject==="Math")?MATH_SKILLS:ENG_SKILLS, sp=a.skillPct||{};
+  const rows=areas.map(k=>`<tr><td>${k}</td><td>${sp[k]!=null?sp[k]+"%":"—"}</td><td>${sp[k]!=null?`<span class="pill ${rag(sp[k])}">${sp[k]>=80?"Strong":sp[k]>=55?"Developing":"Gap"}</span>`:""}</td></tr>`).join("");
+  m.innerHTML=`<div class="ovl"><div class="ex">
+    <div class="flex-between"><h2 style="margin:0">${a.studentName} — result</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div>
+    <p class="sub">${a.subject} · ${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</p>
+    <div class="kpi"><div class="box"><div class="n">${a.score}%</div><div class="l">Overall</div></div><div class="box"><div class="n"><span class="pill ${a.levelCls||'grey'}" style="font-size:12px">${a.level||""}</span></div><div class="l">Level</div></div></div>
+    <table style="margin-top:12px"><thead><tr><th>Skill</th><th>%</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    ${a.writePrompt?`<h3 style="font-size:14px;margin:14px 0 6px">Written response</h3><div style="border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;white-space:pre-wrap">${((a.writeResponse&&a.writeResponse.trim())?a.writeResponse:"(none written)").replace(/</g,"&lt;")}</div>`:""}
+  </div></div>`; m.style.display="block";
+}
+function viewHome(){
+  const me=AUTH, my=assignments();
+  const rows=my.length?my.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>{
+    const status=a.status==="completed"?`<span class="pill green">Completed · ${a.score}%</span>`:`<span class="pill amber">Not started</span>`;
+    const btn=a.status==="completed"?`<button class="btn ghost sm" onclick="showAssignmentResult('${a.id}')">View results</button> <button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Retake</button>`:`<button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Start test</button>`;
+    return `<tr><td><b>${a.subject}</b><div class="muted" style="font-size:11px">shared by ${a.teacherName||a.teacherEmail}</div></td><td>Based on ${gLabel(a.prevGrade)}</td><td>${status}</td><td>${btn}</td></tr>`;
+  }).join(""):`<tr><td colspan="4" class="muted">No tests assigned yet. Your teacher will share a diagnostic with you here.</td></tr>`;
+  return `<div class="card"><h2>Welcome, ${(me.name||'').split(' ')[0]} 👋</h2><p class="sub">${me.email} · Student dashboard</p></div>
+  <div class="card"><h2>My diagnostics</h2><p class="sub">Tests your teacher has shared with you.</p>
+    <table><thead><tr><th>Subject</th><th>Diagnostic</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="muted" style="font-size:12px;margin-top:10px">After a test, use the tabs above for your results, gap analysis, skill plan and the <b>Practice</b> activities.</p>
+  </div>
+  ${S.result?`<div class="card"><h2>My latest result (this device)</h2>
+    <div class="kpi"><div class="box"><div class="n">${S.result.overallPct}%</div><div class="l">Overall</div></div>
+    <div class="box"><div class="n"><span class="pill ${S.result.level.cls}" style="font-size:12px">${S.result.level.name}</span></div><div class="l">Level</div></div></div></div>`:""}`;
+}
+function openAssignment(id,completed){
+  const a=assignments().find(x=>x.id===id); if(!a)return;
+  if(completed){ showAssignmentResult(id); return; }
+  S.activeAssignment=id;
+  S.student={name:AUTH.name,subject:a.subject,prevGrade:a.prevGrade,curGrade:a.curGrade};
+  S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";S.activeTab="diagnostic";
+  save(); render();
+}
+
+function viewSetup(){
+  const s=S.student||{};
+  const opts=GRADES.map(g=>`<option value="${g.id}" ${s.curGrade===g.id?"selected":""}>${g.label}</option>`).join("");
+  const optsPrev=GRADES.map(g=>`<option value="${g.id}" ${s.prevGrade===g.id?"selected":""}>${g.label}</option>`).join("");
+  return `
+  <div class="card">
+    <h2>Student Setup</h2>
+    <p class="sub">The diagnostic is built from the <b>previous grade</b> curriculum. Gap analysis compares it to the <b>current grade</b>.</p>
+    <div class="notice">📁 <b>Full curriculum loaded:</b> Official MOE <b>English (Terms 1–3)</b> and <b>Mathematics (Terms 1–3)</b> are embedded for <b>Grades 6–12</b>, Advanced and General. Grades 9–12 Maths is by unit; Grades 6–8 Maths is translated from the Arabic guides. Browse it all in the <b>📚 Curriculum</b> tab.</div>
+    <div class="row">
+      <div class="col"><label>Student name</label><input id="f_name" value="${s.name||""}" placeholder="e.g. Ahmed Al Mansoori"></div>
+      <div class="col"><label>Subject</label>
+        <select id="f_subject"><option value="English" ${s.subject==="English"?"selected":""}>English</option><option value="Math" ${s.subject==="Math"?"selected":""}>Mathematics</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div class="col"><label>Previous grade (completed)</label><select id="f_prev">${optsPrev}</select></div>
+      <div class="col"><label>Current grade (promoted to)</label><select id="f_cur">${opts}</select></div>
+    </div>
+    <div style="margin-top:20px"><button class="btn" onclick="saveStudent()">Save &amp; continue →</button></div>
+  </div>
+  ${S.student?`<div class="card"><h2>Current student</h2><p class="sub">Saved profile</p>
+    <div class="kpi">
+      <div class="box"><div class="n" style="font-size:18px">${S.student.name||"—"}</div><div class="l">Name</div></div>
+      <div class="box"><div class="n" style="font-size:18px">${S.student.subject}</div><div class="l">Subject</div></div>
+      <div class="box"><div class="n" style="font-size:18px">${gLabel(S.student.prevGrade)}</div><div class="l">Previous</div></div>
+      <div class="box"><div class="n" style="font-size:18px">${gLabel(S.student.curGrade)}</div><div class="l">Current</div></div>
+    </div></div>`:""}
+  `;
+}
+function saveStudent(){
+  const name=document.getElementById("f_name").value.trim();
+  const subject=document.getElementById("f_subject").value;
+  const prevGrade=document.getElementById("f_prev").value;
+  const curGrade=document.getElementById("f_cur").value;
+  if(!name){alert("Please enter the student's name.");return;}
+  const changed=!S.student||S.student.prevGrade!==prevGrade||S.student.subject!==subject;
+  S.student={name,subject,prevGrade,curGrade};
+  if(changed){S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";}
+  S.activeTab="diagnostic";save();render();
+}
+
+function getQuestions(){
+  const g=S.student.prevGrade, subj=S.student.subject;
+  return (QUESTION_BANK[g]&&QUESTION_BANK[g][subj])?QUESTION_BANK[g][subj]:null;
+}
+function viewDiagnostic(){
+  const qs=getQuestions();
+  if(!qs){return `<div class="card"><h2>Diagnostic Test</h2>
+    <div class="empty"><div class="big">📝</div>
+    A question bank for <b>${gLabel(S.student.prevGrade)} · ${S.student.subject}</b> hasn't been added yet.<br>
+    The curriculum for this grade is loaded (see Gap Analysis &amp; Curriculum), but diagnostic <b>items</b> still need to be authored.<br>
+    To try the full demo now, set <b>previous = Grade 6</b> and <b>current = Grade 7</b>.</div></div>`;}
+  let html=`<div class="card"><h2>Diagnostic Test — based on ${gLabel(S.student.prevGrade)} ${S.student.subject}</h2>
+    <p class="sub">${S.student.name} is entering ${gLabel(S.student.curGrade)}. This test checks mastery of the prior grade before measuring readiness for the new one.</p>`;
+  qs.forEach((q,i)=>{
+    html+=`<div class="q"><div class="meta">${q.skill}</div><div class="stem">Q${i+1}. ${q.q}</div>`;
+    q.options.forEach((o,oi)=>{
+      const sel=S.answers[i]===oi;
+      html+=`<label class="opt ${sel?"sel":""}" id="opt-${i}-${oi}"><input type="radio" name="q${i}" ${sel?"checked":""} onchange="pick(${i},${oi})">${o}</label>`;
+    });
+    html+=`</div>`;
+  });
+  if(S.student.subject==="English" && typeof WRITING_PROMPTS!=="undefined" && WRITING_PROMPTS[S.student.prevGrade]){
+    html+=`<div class="q"><div class="meta">Writing · Written Response</div>
+      <div class="stem">✍️ Writing Task — write a full response in the box below:</div>
+      <p style="font-size:14px;background:#f6faf8;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0 0 10px">${WRITING_PROMPTS[S.student.prevGrade]}</p>
+      <textarea id="writeResp" rows="7" oninput="saveWrite(this.value)" placeholder="Write your response here…" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;resize:vertical">${(S.writeResponse||"").replace(/</g,"&lt;")}</textarea>
+      <div class="muted" style="font-size:12px;margin-top:6px">Saved for the teacher to assess with a rubric (this written response is not auto-scored).</div></div>`;
+  }
+  const answered=Object.keys(S.answers).length;
+  html+=`<div class="flex-between"><span class="muted">${answered}/${qs.length} answered</span>
+    <button class="btn gold" onclick="grade()" ${answered<qs.length?"disabled":""}>Submit &amp; analyse →</button></div></div>`;
+  return html;
+}
+function pick(i,oi){S.answers[i]=oi;save();
+  const qs=getQuestions();qs[i].options.forEach((_,k)=>{const el=document.getElementById(`opt-${i}-${k}`);if(el)el.classList.toggle("sel",k===oi);});
+  const answered=Object.keys(S.answers).length;const btn=document.querySelector(".btn.gold");if(btn)btn.disabled=answered<qs.length;
+  const span=document.querySelector(".flex-between .muted");if(span)span.textContent=`${answered}/${qs.length} answered`;
+}
+
+function saveWrite(v){ S.writeResponse = v; save(); }
+// Provisional, transparent auto-estimate of a written response (0-100), pending teacher rubric review.
+function writingScore(text){
+  text=(text||"").trim(); if(!text) return 0;
+  const words=text.split(/\s+/).filter(Boolean).length;
+  const sentences=(text.match(/[.!?]+/g)||[]).length || (words>0?1:0);
+  const linkers=["however","because","therefore","first","second","finally","also","for example","in addition","although","moreover","as a result","in conclusion","on the other hand","furthermore","meanwhile","since","while","but ","so "];
+  const lc=" "+text.toLowerCase()+" ";
+  const transCount=linkers.filter(t=>lc.includes(t)).length;
+  let score=0;
+  score += Math.min(40, words/50*40);
+  score += sentences>=3?25:(sentences===2?14:5);
+  score += Math.min(20, transCount*10);
+  if(/^[A-Z]/.test(text)) score+=8;
+  if(/[.!?]$/.test(text)) score+=7;
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
+function grade(){
+  const qs=getQuestions();
+  const subj=S.student.subject, areas=skillsFor(subj);
+  const per={}; areas.forEach(a=>per[a]={correct:0,total:0});
+  let correct=0;
+  qs.forEach((q,i)=>{ per[q.skill].total++; if(S.answers[i]===q.answer){correct++;per[q.skill].correct++;} });
+  const overallPct=Math.round(correct/qs.length*100);
+  const skillPct={}; areas.forEach(a=>{ skillPct[a]= per[a].total? Math.round(per[a].correct/per[a].total*100):0; });
+  let writingProvisional=null;
+  if(subj==="English"){ const wr=(S.writeResponse||"").trim(); if(wr){ writingProvisional=writingScore(wr); skillPct["Writing"]=writingProvisional; } }
+  S.result={ when:new Date().toISOString(), overallPct, correct, total:qs.length, skillPct, per, level:levelFromPct(overallPct) };
+  S.result.writePrompt=(subj==="English"&&typeof WRITING_PROMPTS!=="undefined")?(WRITING_PROMPTS[S.student.prevGrade]||null):null;
+  S.result.writeResponse=S.writeResponse||"";
+  S.result.writingProvisional=writingProvisional;
+  S.plan=generatePlan();
+  S.activeTab="results"; save(); render();
+}
+
+function viewResults(){
+  const r=S.result, subj=S.student.subject, areas=skillsFor(subj);
+  const lvl=r.level;
+  let rows=areas.map(a=>{
+    const p=r.skillPct[a]; const c=rag(p);
+    const isProvW=(a==="Writing" && r.writingProvisional!=null);
+    const items=isProvW?"essay":`${r.per[a].correct}/${r.per[a].total}`;
+    return `<tr class="skillrow"><td><b>${a}</b>${isProvW?` <span class="muted" style="font-size:10px">(provisional)</span>`:""}</td>
+      <td style="width:45%"><div class="bar"><span style="width:${p}%;background:var(--${c==='green'?'ok':c==='amber'?'amber':'red'})"></span></div></td>
+      <td>${p}%</td><td>${items}</td>
+      <td><span class="pill ${c}">${p>=80?"Strong":p>=55?"Developing":"Gap"}</span></td></tr>`;
+  }).join("");
+  return `
+  <div class="card">
+    <h2>Diagnostic Results — ${S.student.name}</h2>
+    <p class="sub">Based on ${gLabel(S.student.prevGrade)} ${subj} · taken ${new Date(r.when).toLocaleDateString()}</p>
+    <div class="kpi">
+      <div class="box"><div class="n">${r.overallPct}%</div><div class="l">Overall Score</div></div>
+      <div class="box"><div class="n">${r.correct}/${r.total}</div><div class="l">Correct</div></div>
+      <div class="box"><div class="n"><span class="pill ${lvl.cls}" style="font-size:13px">${lvl.name}</span></div><div class="l">Placed Level</div></div>
+      <div class="box"><div class="n" style="font-size:18px">${gLabel(S.student.curGrade)}</div><div class="l">Current Grade</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Skill breakdown</h2>
+    <p class="sub">Mastery of prior-grade skills, by ${subj==="Math"?"strand":"language skill"}</p>
+    <table><thead><tr><th>Skill</th><th>Mastery</th><th>%</th><th>Items</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="muted" style="font-size:12px;margin-top:14px">Placement logic: ≥80% Advanced/On-track · 60–79% Approaching · 40–59% Developing · &lt;40% Needs intensive support. Any skill below 55% is flagged as a gap and targeted in the development plan.</p>
+  </div>
+  ${(subj==="English"&&r.writePrompt)?`<div class="card">
+    <h2>Writing sample — written response</h2>
+    <p class="sub">The student's own writing in response to the prompt — for teacher assessment (not auto-scored).</p>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 8px"><b>Prompt:</b> ${r.writePrompt}</p>
+    <div style="border:1px solid var(--line);border-radius:8px;padding:12px;font-size:13px;white-space:pre-wrap;min-height:60px">${(r.writeResponse&&r.writeResponse.trim())?r.writeResponse.replace(/</g,"&lt;"):"<span class='muted'>(No response was written during the test.)</span>"}</div>
+    <p class="muted" style="font-size:12px;margin-top:8px">The three Writing multiple-choice items above are a quick auto-scored check. This paragraph is the authentic writing sample — assess it with a rubric to set the true Writing level. The Writing % above is a provisional automated estimate (length, structure and cohesion) — pending teacher review.</p>
+  </div>`:""}`;
+}
+
+function gapData(){
+  const subj=S.student.subject, areas=skillsFor(subj);
+  const prevG=S.student.prevGrade, curG=S.student.curGrade;
+  return areas.map(a=>{
+    const p=S.result.skillPct[a];
+    return {skill:a,pct:p,status:rag(p),prev:curriculumFor(prevG,subj,a),cur:curriculumFor(curG,subj,a),gap:p<55};
+  });
+}
+function termList(items){
+  if(!items.length) return `<li>—</li>`;
+  return items.map(o=>`<li><span class="termtag">T${o.term}</span>${o.text}</li>`).join("");
+}
+function viewGaps(){
+  const data=gapData(), subj=S.student.subject;
+  let blocks=data.map(d=>{
+    return `<div class="card">
+      <div class="flex-between"><h2>${d.skill}</h2><span class="pill ${d.status}">${d.pct}% mastery · ${d.gap?"GAP":"OK"}</span></div>
+      <p class="sub">Bridging from ${gLabel(S.student.prevGrade)} to ${gLabel(S.student.curGrade)} · outcomes across loaded terms</p>
+      <div class="row">
+        <div class="col"><label>Where the student is (prior grade)</label>
+          <ul style="margin:6px 0;padding-left:18px;font-size:13px">${termList(d.prev)}</ul></div>
+        <div class="col"><label>Where they must be (current grade)</label>
+          <ul style="margin:6px 0;padding-left:18px;font-size:13px">${termList(d.cur)}</ul></div>
+      </div>
+      ${d.gap?`<div class="notice" style="margin-top:8px">⚠ Priority gap — diagnostic mastery ${d.pct}%. The current-grade outcomes are at risk without targeted support. Included in the development plan.</div>`:`<div class="muted" style="font-size:13px;margin-top:6px">✓ Solid foundation — the student is ready to build the current-grade skills with normal classroom pacing.</div>`}
+    </div>`;
+  }).join("");
+  const gapCount=data.filter(d=>d.gap).length;
+  return `<div class="card"><h2>Gap Analysis</h2><p class="sub">Comparing prior mastery against current-grade demands for ${subj} (Term 1–3 outcomes shown where loaded).</p>
+    <div class="kpi"><div class="box"><div class="n">${gapCount}</div><div class="l">Priority gaps</div></div>
+    <div class="box"><div class="n">${data.length-gapCount}</div><div class="l">Solid skills</div></div>
+    <div class="box"><div class="n">${S.result.overallPct}%</div><div class="l">Overall readiness</div></div></div></div>${blocks}`;
+}
+
+function viewReport(){
+  const r=S.result, data=gapData(), subj=S.student.subject;
+  const gaps=data.filter(d=>d.gap), strong=data.filter(d=>!d.gap);
+  const narrative=`${S.student.name} completed a diagnostic based on the ${gLabel(S.student.prevGrade)} ${subj} curriculum, scoring <b>${r.overallPct}%</b> overall, which places the student at the <b>${r.level.name}</b> level entering ${gLabel(S.student.curGrade)}. `+
+    (gaps.length? `The student shows strength in ${strong.map(s=>s.skill).join(", ")||"few areas"}, but needs targeted support in <b>${gaps.map(g=>g.skill).join(", ")}</b> to meet the demands of the new grade.`:
+    `The student demonstrates a solid foundation across all assessed skills and is well-positioned for ${gLabel(S.student.curGrade)}.`);
+  let rows=data.map(d=>`<tr><td><b>${d.skill}</b></td><td>${d.pct}%</td>
+    <td><span class="pill ${d.status}">${d.gap?"Needs support":"On track"}</span></td>
+    <td style="font-size:12px">${d.gap?"Targeted activities in weekly plan":"Maintain via classroom work"}</td></tr>`).join("");
+  return `<div class="card no-print"><div class="flex-between"><h2>Parent &amp; Teacher Report</h2>
+    <button class="btn ghost sm" onclick="window.print()">🖨 Print / Save PDF</button></div>
+    <p class="sub">Shareable summary of where the student is and where they need to be.</p></div>
+  <div class="card">
+    <div class="print-only" style="margin-bottom:10px"><b>MASAR — Student Diagnostic Report</b></div>
+    <div class="flex-between"><div><h2 style="margin-bottom:2px">${S.student.name}</h2>
+      <span class="tag">${subj}</span> <span class="tag">${gLabel(S.student.prevGrade)} → ${gLabel(S.student.curGrade)}</span> <span class="tag">${new Date(r.when).toLocaleDateString()}</span></div>
+      <span class="pill ${r.level.cls}" style="font-size:14px">${r.level.name}</span></div>
+    <h3 style="margin:18px 0 6px;font-size:14px">Summary</h3>
+    <p style="font-size:14px">${narrative}</p>
+    <h3 style="margin:18px 0 6px;font-size:14px">Comparative analysis — current vs target</h3>
+    <table><thead><tr><th>Skill</th><th>Mastery</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>
+    <h3 style="margin:18px 0 6px;font-size:14px">What happens next</h3>
+    <p style="font-size:14px">A 3-term skill development plan has been generated targeting the gap areas. Each term is broken into weekly folders of activities. Progress is tracked against the plan so parents and teachers can see, week by week, whether ${S.student.name.split(" ")[0]} is on pace to close the gaps before the end of the year.</p>
+    ${r.writePrompt?`<h3 style="margin:18px 0 6px;font-size:14px">Written response — for teacher assessment</h3>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 6px"><b>Prompt:</b> ${r.writePrompt}</p>
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;white-space:pre-wrap">${(r.writeResponse&&r.writeResponse.trim())?r.writeResponse.replace(/</g,"&lt;"):"<span class='muted'>(No response was written.)</span>"}</div>`:""}
+    <p class="muted" style="font-size:12px;margin-top:18px">Generated by Masar · This report reflects a diagnostic snapshot and should be read alongside classroom assessment.</p>
+  </div>`;
+}
+
+const ACTIVITY_LIB={
+  Reading:["Read a short text and write the main idea + 2 supporting details","Highlight 3 pieces of evidence that support an inference","Compare two short articles and note 2 similarities and 2 differences","Summarise a one-page passage in 3–4 sentences","Answer 5 comprehension questions on a levelled text","Identify the author's purpose and tone in a short article","Make 3 predictions about a story and check them after reading","Work out 5 unfamiliar words using context clues","Put the main events of a story in the correct order","Sort 4 facts from 4 opinions in a short text","Write 3 questions about a passage, then find the answers in it","Identify the cause and effect of 3 events in a text","Explain the theme of a short story in 2–3 sentences","Make a story map: characters, setting, problem, solution","Read a news article and summarise the 5 Ws (who, what, when, where, why)"],
+  Writing:["Write a full response (8–10 sentences) to a given writing prompt","Write a paragraph with a topic sentence, 3 details, and a conclusion","Add transition words to a paragraph to improve its flow","Revise a paragraph for punctuation, capitals, and run-ons","Plan and draft a short multi-paragraph piece from an outline","Write an opinion with a clear claim and two supporting reasons","Combine 6 short sentences into smoother, varied sentences","Write a descriptive paragraph using 5 sensory details","Write a 5-sentence summary of something you read this week","Draft an email or letter for a real purpose","Write a counter-argument to a given opinion","Edit a sample paragraph and suggest 3 improvements","Expand a single sentence into a full paragraph","Write a short narrative with a clear beginning, middle, and end"],
+  Vocabulary:["Learn 5 new academic words and use each in a sentence","Match 8 synonyms and 8 antonyms","Break 5 words into prefix / root / suffix and give meanings","Use context clues to define 5 unknown words","Identify and explain 6 examples of figurative language","Sort 10 words by connotation (positive / negative / neutral)","Make a word web for 5 new words (synonyms, antonyms, examples)","Use 6 new words correctly in a short paragraph","Find 5 words with the same root and explain the link","Replace 8 weak words with stronger, more precise choices","Make flashcards for 10 subject-specific words","Find the multiple meanings of 5 common words"],
+  Grammar:["Label nouns, verbs, and adjectives in 8 sentences","Fix subject–verb agreement in 6 sentences","Convert 6 sentences between different tenses","Punctuate a short paragraph correctly","Combine simple sentences using conjunctions","Correct 6 sentences with fragments or misplaced modifiers","Add correct capitalisation to 8 sentences","Identify and fix 6 comma errors","Rewrite 5 sentences from passive to active voice","Use apostrophes correctly in 8 sentences","Identify the clauses and phrases in 6 sentences","Correct pronoun–antecedent agreement in 6 sentences"],
+  "Number & Operations":["Complete 20 mixed multi-digit +/− problems","Solve 15 multiplication and division problems","Practise 10 fraction operations (add, subtract, multiply)","Convert 10 numbers between fractions, decimals, and percents","Solve 8 word problems involving rates or ratios","Order and compare 10 rational numbers","Round 10 numbers to a given place value","Find the GCF and LCM of 6 number pairs","Simplify 8 fractions to lowest terms","Solve 6 multi-step word problems"],
+  "Algebra":["Solve 10 one- and two-step equations","Evaluate 8 algebraic expressions","Continue and describe 6 patterns or sequences","Build and complete an input/output (function) table","Solve 6 inequalities and graph the solutions","Write an expression or equation for 6 word problems","Graph 4 linear equations","Simplify 8 expressions by combining like terms","Solve 6 proportion problems","Factor 6 simple expressions"],
+  "Geometry":["Find the perimeter and area of 8 figures","Find the surface area or volume of 6 solids","Classify 10 shapes or angles by their properties","Measure and draw 5 shapes accurately","Solve 5 problems using the Pythagorean theorem or similarity","Plot and identify 8 points on the coordinate plane","Calculate missing angles in 6 figures","Find missing side lengths in 5 right triangles","Identify the transformation in 6 figures","Find the volume of 5 prisms or cylinders"],
+  "Data & Probability":["Read and answer questions on 3 graphs","Find the mean, median, mode, and range of 4 data sets","Calculate the probability of 8 simple events","Build a bar graph or line plot from given data","Interpret a scatter plot and describe the trend","Compare two data sets and write 2 conclusions","Create a frequency table from raw data","Find the probability of 6 compound events","Calculate the mean of 5 larger data sets","Draw and interpret a box plot"]
+};
+function generatePlan(){
+  const subj=S.student.subject, areas=skillsFor(subj);
+  const gaps=areas.filter(a=>S.result.skillPct[a]<55);
+  const focus = gaps.length?gaps:areas.slice();
+  const WEEKS=6;
+  const terms={};
+  ["1","2","3"].forEach((t,ti)=>{
+    const weeks=[];
+    for(let w=1;w<=WEEKS;w++){
+      const skill=focus[(w-1)%focus.length];
+      const lib=ACTIVITY_LIB[skill]||["Practice activity"];
+      const L=lib.length; const base=((ti*WEEKS)+(w-1))*3;
+      const tasks=[lib[base%L], lib[(base+1)%L], lib[(base+2)%L]];
+      weeks.push({week:w,skill,tasks});
+    }
+    terms[t]={ goal:`By end of Term ${t}: raise ${focus.join(", ")} toward grade-level mastery (target ${60+ti*10}%+).`, weeks };
+  });
+  return {focus,termWeeks:WEEKS,terms,createdFrom:S.result.when};
+}
+
+function viewPlan(){
+  const p=S.plan, subj=S.student.subject;
+  let terms=["1","2","3"].map(t=>{
+    const tm=p.terms[t];
+    return `<div class="card"><div class="flex-between"><h2>Term ${t}</h2><span class="tag">${p.termWeeks} weeks</span></div>
+      <p class="sub">${tm.goal}</p>
+      <table><thead><tr><th>Week</th><th>Focus skill</th><th>Activities</th></tr></thead><tbody>
+      ${tm.weeks.map(w=>`<tr><td>W${w.week}</td><td><b>${w.skill}</b></td><td style="font-size:13px">${w.tasks.join("<br>")}</td></tr>`).join("")}
+      </tbody></table></div>`;
+  }).join("");
+  return `<div class="card"><h2>Skill Development Plan</h2>
+    <p class="sub">3 terms · targeting ${p.focus.length} focus ${p.focus.length===1?"skill":"skills"} for ${S.student.name} in ${subj}.</p>
+    <div class="kpi">${p.focus.map(f=>`<div class="box"><div class="n" style="font-size:14px">${f}</div><div class="l">${S.result.skillPct[f]}% → target</div></div>`).join("")}</div>
+    <p class="muted" style="font-size:12px;margin-top:14px">Focus skills are those below 55% on the diagnostic. The plan distributes practice across 3 terms, raising the target band each term. Open <b>Weekly Folders</b> to work through tasks and the <b>Tracker</b> to monitor pace.</p>
+  </div>${terms}`;
+}
+
+function viewFolders(){
+  const p=S.plan;
+  let html=`<div class="card"><h2>Weekly Folders</h2><p class="sub">Each term holds weekly folders. Tick tasks as ${S.student.name.split(" ")[0]} completes them — progress feeds the tracker.</p></div>`;
+  ["1","2","3"].forEach(t=>{
+    html+=`<div class="card"><h2 style="margin-bottom:12px">Term ${t}</h2>`;
+    p.terms[t].weeks.forEach(w=>{
+      const id=`f-${t}-${w.week}`;
+      const done=w.tasks.filter((_,i)=>S.taskDone[`${t}-${w.week}-${i}`]).length;
+      html+=`<div class="folder open" id="${id}">
+        <div class="fh" onclick="document.getElementById('${id}').classList.toggle('open')">
+          <div class="ft">📁 Week ${w.week} — ${w.skill}</div>
+          <span class="pill ${done===w.tasks.length?"green":done>0?"amber":"grey"}">${done}/${w.tasks.length} done</span>
+        </div>
+        <div class="body">
+          ${w.tasks.map((tk,i)=>{const key=`${t}-${w.week}-${i}`;const ck=!!S.taskDone[key];
+            return `<div class="task"><input type="checkbox" ${ck?"checked":""} onchange="toggleTask('${key}','${id}')">
+            <div style="flex:1"><div class="tt" style="${ck?'text-decoration:line-through;color:#8a94a3':''}">${tk}</div>
+            <div class="ts">${w.skill} · Week ${w.week} activity</div></div>
+            <button class="btn sm ${ck?'green':'gold'}" style="white-space:nowrap" onclick="launchExercise('${key}','${w.skill}')">${ck?'✓ Done':'▶ Practice'}</button></div>`;}).join("")}
+        </div></div>`;
+    });
+    html+=`</div>`;
+  });
+  return html;
+}
+function toggleTask(key,folderId){
+  S.taskDone[key]=!S.taskDone[key];save();
+  const open=document.querySelectorAll(".folder.open");const openIds=[...open].map(o=>o.id);
+  render();
+  openIds.forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("open");});
+}
+
+function termProgress(t){
+  const p=S.plan;let total=0,done=0;
+  p.terms[t].weeks.forEach(w=>w.tasks.forEach((_,i)=>{total++;if(S.taskDone[`${t}-${w.week}-${i}`])done++;}));
+  return {done,total,pct:total?Math.round(done/total*100):0};
+}
+function viewTracker(){
+  const p=S.plan;
+  const t1=termProgress("1"),t2=termProgress("2"),t3=termProgress("3");
+  const totalDone=t1.done+t2.done+t3.done, totalAll=t1.total+t2.total+t3.total;
+  const yearPct=totalAll?Math.round(totalDone/totalAll*100):0;
+  const terms=[{k:"1",d:t1},{k:"2",d:t2},{k:"3",d:t3}];
+  const planTarget=[100,100,100];
+  const chart=`<div class="chartwrap">${terms.map((x,i)=>`
+    <div class="colbar"><span style="font-size:11px;font-weight:700">${x.d.pct}%</span>
+      <div style="display:flex;gap:4px;align-items:flex-end;height:100%;width:100%;justify-content:center">
+        <div class="vb" style="height:${x.d.pct}%" title="Actual"></div>
+        <div class="vb plan" style="height:${planTarget[i]}%;opacity:.5" title="Plan target"></div>
+      </div>
+      <span style="font-size:11px;color:var(--muted)">Term ${x.k}</span></div>`).join("")}</div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Actual completion</span><span><i style="background:var(--gold)"></i>Plan target</span></div>`;
+  const onPace = yearPct>=Math.round((t1.total/totalAll)*100*0.6);
+  let skillBreak = p.focus.map(f=>{
+    let d=0,tt=0;
+    ["1","2","3"].forEach(t=>p.terms[t].weeks.forEach(w=>{if(w.skill===f)w.tasks.forEach((_,i)=>{tt++;if(S.taskDone[`${t}-${w.week}-${i}`])d++;});}));
+    const pct=tt?Math.round(d/tt*100):0;
+    return `<tr><td><b>${f}</b></td><td>${S.result.skillPct[f]}%</td>
+      <td style="width:40%"><div class="bar"><span style="width:${pct}%"></span></div></td><td>${pct}%</td>
+      <td><span class="pill ${pct>=60?"green":pct>0?"amber":"grey"}">${pct>=60?"Improving":pct>0?"Started":"Not started"}</span></td></tr>`;
+  }).join("");
+  return `<div class="card"><h2>Progress Tracker</h2><p class="sub">Achievement across each term and the full year, against the development plan.</p>
+    <div class="kpi">
+      <div class="box"><div class="n">${yearPct}%</div><div class="l">Year completion</div></div>
+      <div class="box"><div class="n">${totalDone}/${totalAll}</div><div class="l">Tasks done</div></div>
+      <div class="box"><div class="n">${t1.pct}%</div><div class="l">Term 1</div></div>
+      <div class="box"><div class="n"><span class="pill ${yearPct>0?(onPace?'green':'amber'):'grey'}">${yearPct===0?"Not started":onPace?"On pace":"Behind pace"}</span></div><div class="l">Status</div></div>
+    </div></div>
+    <div class="card"><h2>Completion by term</h2><p class="sub">Actual vs plan target</p>${chart}</div>
+    <div class="card"><h2>Improvement by focus skill</h2><p class="sub">Diagnostic baseline → activities completed</p>
+    <table><thead><tr><th>Skill</th><th>Baseline</th><th>Plan progress</th><th>%</th><th>Trend</th></tr></thead><tbody>${skillBreak}</tbody></table>
+    <p class="muted" style="font-size:12px;margin-top:12px">As tasks are ticked in Weekly Folders, this view updates automatically. In the production version, periodic re-tests re-measure mastery and plot the real skill-growth curve against the target line.</p></div>`;
+}
+
+function curState(){ S.curView=S.curView||{grade:(S.student?S.student.curGrade:"6"),subject:(S.student?S.student.subject:"English")}; return S.curView; }
+function setCur(k,v){ const c=curState(); c[k]=v; save(); render(); }
+function viewCurriculum(){
+  const c=curState();
+  const gopts=GRADES.map(g=>`<option value="${g.id}" ${c.grade===g.id?"selected":""}>${g.label}</option>`).join("");
+  let loadedTerms=0, body="";
+  ["1","2","3"].forEach(t=>{
+    const data=(CURRICULUM[c.grade]&&CURRICULUM[c.grade][t]&&CURRICULUM[c.grade][t][c.subject])||{};
+    const strands=Object.keys(data);
+    const anyReal=strands.some(st=>(data[st]||[]).some(x=>x&&!x.startsWith("(")));
+    if(anyReal) loadedTerms++;
+    let inner=strands.map(st=>{
+      const items=(data[st]||[]).filter(x=>x);
+      const real=items.length && !items[0].startsWith("(");
+      return `<div style="margin-bottom:12px"><div style="font-weight:700;font-size:14px;margin-bottom:4px">${st}</div>
+        <ul style="margin:4px 0;padding-left:18px;font-size:13px;color:${real?'var(--ink)':'var(--muted)'}">${(items.length?items:["—"]).map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
+    }).join("");
+    body+=`<div class="card"><div class="flex-between"><h2>Term ${t}</h2><span class="tag">${strands.length} ${c.subject==="Math"?"unit(s)/strand(s)":"skill(s)"}</span></div>${inner||'<p class="muted" style="font-size:13px">No data yet.</p>'}</div>`;
+  });
+  return `<div class="card"><h2>Curriculum Browser</h2>
+    <p class="sub">Official MOE outcomes embedded in the app — ${loadedTerms} of 3 terms loaded for ${gLabel(c.grade)} ${c.subject==="Math"?"Mathematics":"English"}.</p>
+    <div class="row">
+      <div class="col"><label>Grade</label><select onchange="setCur('grade',this.value)">${gopts}</select></div>
+      <div class="col"><label>Subject</label><select onchange="setCur('subject',this.value)"><option value="English" ${c.subject==='English'?'selected':''}>English</option><option value="Math" ${c.subject==='Math'?'selected':''}>Mathematics</option></select></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:12px">English: Reading, Writing, Vocabulary, Grammar (Terms 1–3). Mathematics: Grades 9–12 organised by unit; Grades 6–8 translated from the official Arabic guides and grouped by domain (Terms 1–3).</p>
+  </div>${body}`;
+}
+
+/* ===== INTERACTIVE PRACTICE EXERCISES ===== */
+const READING_PASSAGES=[
+ {title:"The Great Barrier Reef",text:"The Great Barrier Reef, off the coast of Australia, is the world's largest coral reef system. It is made of thousands of reefs and hundreds of islands, and is home to many fish, turtles and sharks. However, rising sea temperatures threaten the coral, causing it to lose its colour in a process called bleaching.",qs:[{q:"What is the main idea of the passage?",options:["Australia has many islands","The reef is large, diverse and under threat","Sharks are dangerous","Coral is colourful"],answer:1},{q:"What causes coral bleaching?",options:["Too many fish","Rising sea temperatures","Tourists","Islands"],answer:1},{q:"The word 'threaten' suggests the reef is:",options:["safe","in danger","growing","new"],answer:1}]},
+ {title:"Bees and Their Importance",text:"Bees are small insects that play a huge role in nature. As they move from flower to flower collecting nectar, they carry pollen, which helps plants make seeds and fruit. Without bees, many crops would fail. Sadly, bee populations are falling because of pesticides and loss of habitat.",qs:[{q:"Why are bees important?",options:["They make noise","They pollinate plants","They are colourful","They sleep a lot"],answer:1},{q:"What is harming bees?",options:["Flowers","Pesticides and habitat loss","Rain","Other insects"],answer:1},{q:"What is nectar?",options:["a sweet liquid in flowers","a type of bee","a season","a crop"],answer:0}]},
+ {title:"A Surprising Discovery",text:"When Mariam opened the dusty old box in the attic, she did not expect to find anything special. Inside were letters tied with ribbon, written by her great-grandmother fifty years ago. As she read them, Mariam learned about a family she had never known and felt a deep connection to her past.",qs:[{q:"What did Mariam find in the box?",options:["money","old letters","toys","photos only"],answer:1},{q:"How did Mariam feel after reading the letters?",options:["bored","connected to her past","angry","afraid"],answer:1},{q:"Where did she find the box?",options:["the garden","the attic","school","a shop"],answer:1}]},
+ {title:"The Water Cycle",text:"Water is always moving in a cycle. The sun heats water in oceans and lakes, turning it into vapour that rises into the air. As the vapour cools, it forms clouds. Eventually the water falls back to Earth as rain or snow, and the cycle begins again.",qs:[{q:"What starts the water cycle?",options:["the wind","the sun heating water","clouds","rivers"],answer:1},{q:"What forms when water vapour cools?",options:["rain only","clouds","caves","oceans"],answer:1},{q:"This passage is mainly:",options:["a story","an explanation","an opinion","a poem"],answer:1}]}
+];
+const GRAMMAR_POOL=[
+ {q:"Choose the correct verb: \"The group of students ___ ready.\"",options:["are","is","were","be"],answer:1},
+ {q:"Choose the correct tense: \"Yesterday, she ___ to the market.\"",options:["go","goes","went","gone"],answer:2},
+ {q:"Which sentence is punctuated correctly?",options:["Its raining today.","It's raining today.","Its' raining today.","Its raining, today"],answer:1},
+ {q:"Choose the best correction: \"Me and him went home.\"",options:["Me and him went home.","Him and me went home.","He and I went home.","I and he went home."],answer:2},
+ {q:"Choose the correct word: \"They left ___ books at home.\"",options:["there","their","they're","theyre"],answer:1},
+ {q:"Which is a complete sentence?",options:["Running fast.","Because it rained.","The dog barked.","After the game."],answer:2},
+ {q:"Choose the plural: \"one child, two ___\"",options:["childs","children","childes","child"],answer:1},
+ {q:"Subject-verb agreement: \"Neither answer ___ correct.\"",options:["are","is","were","be"],answer:1},
+ {q:"Apostrophe: \"the ___ toys\" (toys belonging to the dogs)",options:["dogs","dog's","dogs'","dogses"],answer:2},
+ {q:"Choose the adverb: \"She sang ___.\"",options:["beautiful","beauty","beautifully","beautify"],answer:2},
+ {q:"Comma use: \"After dinner ___ we watched a film.\"",options:["After dinner we","After dinner, we","After, dinner we","After dinner; we"],answer:1},
+ {q:"Pronoun: \"Each student must bring ___ own pen.\"",options:["their","his or her","them","they"],answer:1},
+ {q:"Choose the correct word: \"I have ___ apples than you.\"",options:["less","fewer","lesser","few"],answer:1},
+ {q:"Rewrite in the active voice: \"The ball was thrown by Sam.\"",options:["The ball was thrown.","Sam threw the ball.","The ball, thrown by Sam.","Thrown the ball Sam."],answer:1},
+ {q:"Which is capitalised correctly?",options:["i visited london in july.","I visited London in July.","I visited london in July.","i visited London in july."],answer:1}
+];
+const VOCAB_POOL=[
+ {q:"Synonym of \"rapid\":",options:["slow","quick","heavy","quiet"],answer:1},
+ {q:"Antonym of \"ancient\":",options:["old","modern","huge","dark"],answer:1},
+ {q:"\"Generous\" means:",options:["selfish","giving","tired","loud"],answer:1},
+ {q:"The prefix \"un-\" means:",options:["again","not","before","under"],answer:1},
+ {q:"\"Brave\" is closest to:",options:["fearful","courageous","weak","silent"],answer:1},
+ {q:"Antonym of \"expand\":",options:["grow","shrink","stretch","widen"],answer:1},
+ {q:"\"Fragile\" means:",options:["strong","easily broken","heavy","fast"],answer:1},
+ {q:"The root \"aqua\" relates to:",options:["fire","water","air","earth"],answer:1},
+ {q:"\"Reluctant\" means:",options:["eager","unwilling","happy","quick"],answer:1},
+ {q:"Synonym of \"enormous\":",options:["tiny","huge","average","narrow"],answer:1},
+ {q:"\"Optimistic\" means:",options:["hopeful","gloomy","angry","tired"],answer:0},
+ {q:"Antonym of \"increase\":",options:["raise","decrease","add","grow"],answer:1},
+ {q:"\"Vital\" means:",options:["unimportant","essential","colourful","late"],answer:1},
+ {q:"The suffix \"-less\" means:",options:["full of","without","again","before"],answer:1},
+ {q:"\"Curious\" means:",options:["bored","eager to learn","sleepy","angry"],answer:1}
+];
+const WRITING_PRACTICE_PROMPTS=[
+ "Write a short paragraph (at least 40 words) about a place you would like to visit and why.",
+ "Describe your typical school day. Use a topic sentence and at least three details.",
+ "Do you think students should have longer breaks? Give your opinion with two reasons.",
+ "Write about a time you helped someone. What happened, and how did you feel?",
+ "Describe your favourite season using sensory details (sights, sounds and smells)."
+];
+function exRnd(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function exPickN(arr,k){const c=arr.slice(),o=[];while(o.length<k&&c.length)o.push(c.splice(exRnd(0,c.length-1),1)[0]);return o;}
+function genMath(strand){
+  const items=[];
+  for(let i=0;i<5;i++){
+    if(strand.indexOf("Number")>=0){
+      const t=exRnd(0,3);
+      if(t===0){const a=exRnd(12,99),b=exRnd(12,99);items.push({q:`${a} + ${b} = ?`,answer:a+b});}
+      else if(t===1){const a=exRnd(50,99),b=exRnd(10,49);items.push({q:`${a} − ${b} = ?`,answer:a-b});}
+      else if(t===2){const a=exRnd(3,12),b=exRnd(3,12);items.push({q:`${a} × ${b} = ?`,answer:a*b});}
+      else {const b=exRnd(2,9),x=exRnd(2,12);items.push({q:`${b*x} ÷ ${b} = ?`,answer:x});}
+    } else if(strand.indexOf("Algebra")>=0){
+      const a=exRnd(2,6),x=exRnd(1,9),b=exRnd(1,9);items.push({q:`Solve for x:  ${a}x + ${b} = ${a*x+b}`,answer:x});
+    } else if(strand.indexOf("Geometry")>=0){
+      const t=exRnd(0,2);
+      if(t===0){const w=exRnd(3,12),hh=exRnd(3,12);items.push({q:`Area of a rectangle ${w} × ${hh} = ?`,answer:w*hh});}
+      else if(t===1){const w=exRnd(3,12),hh=exRnd(3,12);items.push({q:`Perimeter of a rectangle ${w} × ${hh} = ?`,answer:2*(w+hh)});}
+      else {const b=exRnd(4,12),hh=exRnd(2,10);items.push({q:`Area of a triangle with base ${b} and height ${hh} = ?`,answer:b*hh/2});}
+    } else {
+      const arr=Array.from({length:4},()=>exRnd(2,20));const sum=arr.reduce((a,b)=>a+b,0);
+      items.push({q:`Find the mean of ${arr.join(", ")}`,answer:Math.round(sum/4*100)/100});
+    }
+  }
+  return items;
+}
+function buildExercise(skill){
+  if(skill==="Reading"){const p=READING_PASSAGES[exRnd(0,READING_PASSAGES.length-1)];return {type:"mcq",intro:`<b>${p.title}</b><br>${p.text}`,items:p.qs};}
+  if(skill==="Grammar")return {type:"mcq",items:exPickN(GRAMMAR_POOL,5)};
+  if(skill==="Vocabulary")return {type:"mcq",items:exPickN(VOCAB_POOL,5)};
+  if(skill==="Writing")return {type:"writing",prompt:WRITING_PRACTICE_PROMPTS[exRnd(0,WRITING_PRACTICE_PROMPTS.length-1)]};
+  return {type:"mathinput",items:genMath(skill)};
+}
+let EX=null;
+function launchExercise(key,skill){ EX={key,skill,def:buildExercise(skill),resp:{},submitted:false}; renderExercise(); }
+function exPick(i,oi){ if(EX.submitted)return; EX.resp[i]=oi; renderExercise(); }
+function exInput(i,v){ EX.resp[i]=v; }
+function exWrite(v){ EX.resp.text=v; }
+function submitExercise(){
+  const d=EX.def;
+  if(d.type==="mcq"){let c=0; d.items.forEach((it,i)=>{ if(EX.resp[i]===it.answer)c++; }); EX.correct=c; EX.total=d.items.length; EX.score=Math.round(c/d.items.length*100);}
+  else if(d.type==="mathinput"){let c=0; d.items.forEach((it,i)=>{ const v=parseFloat(String(EX.resp[i]==null?"":EX.resp[i]).replace(/[^0-9.\-]/g,"")); if(!isNaN(v)&&Math.abs(v-it.answer)<0.02)c++; }); EX.correct=c; EX.total=d.items.length; EX.score=Math.round(c/d.items.length*100);}
+  else { const t=(EX.resp.text||""); EX.words=t.trim()?t.trim().split(/\s+/).length:0; EX.score=writingScore(t); }
+  EX.submitted=true; renderExercise();
+}
+function finishExercise(){ if(EX){ S.taskDone[EX.key]=true; save(); } closeExercise(); render(); }
+function closeExercise(){ EX=null; const m=document.getElementById("exModal"); if(m){ m.style.display="none"; m.innerHTML=""; } }
+function renderExercise(){
+  const m=document.getElementById("exModal"); const d=EX.def; let body="";
+  if(d.type==="writing"){
+    body=`<p style="font-size:14px;background:#f6faf8;border:1px solid var(--line);border-radius:8px;padding:12px">${d.prompt}</p>
+      <textarea oninput="exWrite(this.value)" rows="8" placeholder="Write your response here…" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;resize:vertical">${(EX.resp.text||"").replace(/</g,"&lt;")}</textarea>`;
+  } else {
+    if(d.intro) body+=`<div class="exq" style="background:#f9fbfc">${d.intro}</div>`;
+    if(d.type==="mcq"){
+      d.items.forEach((it,i)=>{
+        body+=`<div class="exq"><div style="font-weight:600;margin-bottom:8px">Q${i+1}. ${it.q}</div>`;
+        it.options.forEach((o,oi)=>{
+          let cls="opt"; if(EX.resp[i]===oi)cls+=" sel";
+          if(EX.submitted){ if(oi===it.answer)cls+=" exok"; else if(EX.resp[i]===oi)cls+=" exbad"; }
+          body+=`<label class="${cls}" onclick="exPick(${i},${oi})">${o}</label>`;
+        });
+        body+=`</div>`;
+      });
+    } else {
+      d.items.forEach((it,i)=>{
+        let mark="";
+        if(EX.submitted){ const v=parseFloat(String(EX.resp[i]==null?"":EX.resp[i]).replace(/[^0-9.\-]/g,"")); const ok=!isNaN(v)&&Math.abs(v-it.answer)<0.02; mark=` <span style="font-weight:700;color:${ok?'var(--ok)':'var(--red)'}">${ok?'✓':'✗ ('+it.answer+')'}</span>`; }
+        body+=`<div class="exq"><div style="font-weight:600;margin-bottom:8px">Q${i+1}. ${it.q}</div>
+          <input ${EX.submitted?"disabled":""} value="${EX.resp[i]!=null?EX.resp[i]:""}" oninput="exInput(${i},this.value)" placeholder="Your answer" style="max-width:220px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:14px">${mark}</div>`;
+      });
+    }
+  }
+  let footer="";
+  if(!EX.submitted){ footer=`<button class="btn gold" onclick="submitExercise()">Check answers</button><button class="btn ghost" onclick="closeExercise()">Cancel</button>`; }
+  else{
+    const msg = d.type==="writing"
+      ? `You wrote <b>${EX.words}</b> words — provisional score <b>${EX.score}%</b> (your teacher gives the final mark).`
+      : `You scored <b>${EX.correct}/${EX.total}</b> &nbsp;(<b>${EX.score}%</b>).`;
+    footer=`<div class="notice" style="margin:0;background:${EX.score>=60?'#e5f3ec':'#fdf3da'};border-color:#cfe6da;flex:1 1 100%">${msg} ${EX.score>=60?'Great work! 🎉':'Keep practising — try again any time.'}</div>
+      <button class="btn" onclick="finishExercise()">✓ Finish &amp; mark complete</button>
+      <button class="btn ghost" onclick="closeExercise()">Close</button>`;
+  }
+  m.innerHTML=`<div class="ovl"><div class="ex">
+    <div class="flex-between"><h2 style="margin:0">Practice — ${EX.skill}</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div>
+    <p class="sub">Complete the activity below. When you finish, it is ticked off and your progress updates automatically.</p>
+    ${body}
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">${footer}</div>
+  </div></div>`;
+  m.style.display="block";
+}
+
+/* ---- PWA: inline icon + manifest (works in browser; harmless in Electron) ---- */
+const MASAR_ICON="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAUIElEQVR4nO3dO7IcRRYG4BQBlmY5ipgFYGKIDcwWxFpgC2wAjDG1ACJYDlgyNIamReuqH/XIx8k83+eAIbhVeY3/P6eqW68KIb1+9/bj6GsAqOHvX35/Nfoa+JpfyiACHuATBWEMh96BsAfYRylozwE3IPAB6lII6nOgFQh8gL4UgvMc4EFCHyAGZeAYh7aD0AeITRnYzkE9IfQB5qQMPOZw7hD8AGtQBG5zKFeEPsDalIF/OIgi+AGyUQSSFwDBD5Bb5iKQ8sYFPwDXMhaBVDcs+AF4JFMRSHGjgh+APTIUgW9GX0Brwh+AvTJkx7INJ8MvD4D2Vt0GLHdTgh+AFlYrAks9AhD+ALSyWsYs0WZW+6UAENsK24DpNwDCH4DeVsieqQvACr8AAOY0ewZNucKY/dABWMuMjwSm2wAIfwCimTGbpioAMx4wADnMllFTrCxmO1QAcpvhkUD4DYDwB2A2M2RX6AIwwwECwC3RMyxsAYh+cADwTOQsC1kAIh8YAOwRNdPCFYCoBwUAR0XMtlAFIOIBAUAN0TIuTAGIdjAAUFukrAtRACIdCAC0FCXzhheAKAcBAL1EyL6hBSDCAQDACKMzcFgBGH3jADDayCwcUgCEPwB8MioTuxcA4Q8AXxqRjV0LgPAHgNt6Z2S3AiD8AeCxnlnZpQAIfwDYpldmDv8eAACgv+YFwPQPAPv0yM6mBUD4A8AxrTO0WQEQ/gBwTsss9Q4AACTUpACY/gGgjlaZWr0ACH8AqKtFtlYtAMIfANqonbHeAQCAhKoVANM/ALRVM2urFADhDwB11MrcjwAAIKHTBcD0DwB91cheGwAASKhKAbAFAIA+amVutQ2AEgAAbdXMWo8AACChqgXAFgAA2qidsdU3AEoAANTVIlubPAJQAgCgjlaZ6h0AAEioWQGwBQCAc1pmadMNgBIAAMe0ztDmjwCUAADYp0d2egcAABLqUgBsAQBgm16Z2W0DoAQAwGM9s7LrIwAlAABu652R3d8BUAIA4EsjsnHIS4BKAAB8MioTh30KQAkAILuRWTj0Y4BKAABZjc7A4d8DMPoAAKC3CNk3vACUEuMgAKCHKJkXogCUEudAAKCVSFkXpgCUEutgAKCmaBkXqgCUEu+AAOCsiNkWrgCUEvOgAOCIqJkWsgCUEvvgAOCR6BkWugCUEv8AAeClGbIr/AVee/3u7cfR1wAA98wQ/BfhNwDXZjpYAHKZLaOmKgClzHfAAKxvxmya7oKveSQAwEgzBv/FdBuAazMfPABzmz2Dpi4Apcz/CwBgPitkz/Q3cM0jAQBaWiH4L6bfAFxb6RcDQCyrZcxSN3PNNgCAGlYL/oslb+qaIgDAEasG/8VSjwBuWf0XCEB9GbJj+Ru8ZhsAwCMZgv8izY1eUwQAuJYp+C/S3fA1RQAgt4zBf5H2xq8pAgC5ZA7+i/QHcE0RAFib4P+Hg7hDGQBYg9C/zaE8oQgAzEnwP+ZwdlAGAGIT+ts5qIOUAYAYhP4xDq0CZQCgL6F/ngNsQCEAqEvg1+dAO1AIAPYR+O054EGUAoBPhP0YDj0oBQFYhYCP6X8sL0mh/lwQkwAAAABJRU5ErkJggg==";
+(function(){
+  try{
+    var base=location.href, dir=base.replace(/[^\/]*$/,"");
+    var mani={name:"Masar — Curriculum Diagnostic & Skill Development",short_name:"Masar",start_url:base,scope:dir,display:"standalone",background_color:"#0b6e4f",theme_color:"#0b6e4f",icons:[{src:MASAR_ICON,sizes:"512x512",type:"image/png",purpose:"any"},{src:MASAR_ICON,sizes:"512x512",type:"image/png",purpose:"maskable"}]};
+    var m=document.createElement("link");m.rel="manifest";m.href="data:application/manifest+json,"+encodeURIComponent(JSON.stringify(mani));document.head.appendChild(m);
+    var a=document.createElement("link");a.rel="apple-touch-icon";a.href=MASAR_ICON;document.head.appendChild(a);
+    var f=document.createElement("link");f.rel="icon";f.href=MASAR_ICON;document.head.appendChild(f);
+  }catch(e){}
+})();
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault(); deferredPrompt=e;
+  const b=document.getElementById("installBtn"); if(b) b.style.display="inline-block";
+});
+var ib=document.getElementById("installBtn");
+if(ib) ib.addEventListener("click", async ()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt(); await deferredPrompt.userChoice;
+  deferredPrompt=null; ib.style.display="none";
+});
+window.addEventListener("appinstalled", ()=>{ const b=document.getElementById("installBtn"); if(b)b.style.display="none"; });
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  window.addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+
+fbAuth.onAuthStateChanged(function(user){
+  _unsub.forEach(u=>{try{u()}catch(e){}}); _unsub=[];
+  if(!user){ AUTH=null; CACHE={assignments:[]}; S=freshState(); render(); return; }
+  db.collection("users").doc(user.uid).get().then(doc=>{
+    AUTH=Object.assign({uid:user.uid,email:(user.email||"").toLowerCase()}, doc.exists?doc.data():{role:"student",name:user.email});
+    CACHE={assignments:[]};
+    startListeners();
+    if(AUTH.role==="student") loadStateForUser();
+    render();
+  }).catch(e=>{ console.warn(e); render(); });
+});
+render();
+</script>
+</body>
+</html>
