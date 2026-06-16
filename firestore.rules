@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A user can read any profile (needed to look up a teacher's name),
+    // but can only create/edit their OWN profile document.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Assignments: any signed-in user can read (the app filters by their email/uid).
+    // Only the teacher who owns it can create/delete it.
+    // Any signed-in user can update (the student writes their result back).
+    match /assignments/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.teacherUid == request.auth.uid;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && resource.data.teacherUid == request.auth.uid;
+    }
+  }
+}

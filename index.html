@@ -163,7 +163,14 @@ function reset(){ if(confirm("Clear this student's progress on this device and s
 function syncResultToAssignment(){
   if(!(AUTH&&AUTH.role==="student")||!S.result||!S.activeAssignment) return;
   const r=S.result;
-  db.collection("assignments").doc(S.activeAssignment).set({status:"completed",score:r.overallPct,level:r.level?r.level.name:"",levelCls:r.level?r.level.cls:"grey",skillPct:r.skillPct||{},subject:S.student.subject,writePrompt:r.writePrompt||"",writeResponse:r.writeResponse||"",completedAt:Date.now()},{merge:true}).catch(e=>console.warn("sync result:",e));
+  const payload={status:"completed",score:r.overallPct,level:r.level?r.level.name:"",levelCls:r.level?r.level.cls:"grey",skillPct:r.skillPct||{},subject:S.student.subject,writePrompt:r.writePrompt||"",writeResponse:r.writeResponse||"",completedAt:Date.now()};
+  if(S.plan){
+    let totalDone=0,totalAll=0,tp={};
+    ["1","2","3"].forEach(t=>{let d=0,tt=0; S.plan.terms[t].weeks.forEach(w=>w.tasks.forEach((_,i)=>{tt++; if(S.taskDone[t+"-"+w.week+"-"+i])d++;})); tp[t]=tt?Math.round(d/tt*100):0; totalDone+=d; totalAll+=tt;});
+    const focus=(S.plan.focus||[]).map(f=>{let d=0,tt=0; ["1","2","3"].forEach(t=>S.plan.terms[t].weeks.forEach(w=>{if(w.skill===f)w.tasks.forEach((_,i)=>{tt++; if(S.taskDone[t+"-"+w.week+"-"+i])d++;});})); return {skill:f,baseline:(S.result.skillPct[f]||0),planPct:tt?Math.round(d/tt*100):0};});
+    payload.progress={yearPct:totalAll?Math.round(totalDone/totalAll*100):0,t1:tp["1"],t2:tp["2"],t3:tp["3"],totalDone:totalDone,totalAll:totalAll,focus:focus,updatedAt:Date.now()};
+  }
+  db.collection("assignments").doc(S.activeAssignment).set(payload,{merge:true}).catch(e=>console.warn("sync:",e));
 }
 function startListeners(){
   _unsub.forEach(u=>{try{u()}catch(e){}}); _unsub=[];
@@ -274,13 +281,14 @@ function viewTeacher(){
     return `<tr><td><b>${s.name}</b><div class="muted" style="font-size:11px">${s.email}</div></td>
       <td>${sa.length} assigned · ${done.length} done</td>
       <td>${last?`${last.score}% · ${last.level||""}`:"—"}</td>
-      <td>${last?`<button class="btn ghost sm" onclick="showAssignmentResult('${last.id}')">View</button>`:""}</td></tr>`;
+      <td>${(last&&last.progress)?`${last.progress.yearPct}% <span class="muted" style="font-size:10px">(${last.progress.totalDone}/${last.progress.totalAll})</span>`:"—"}</td>
+      <td>${last?`<button class="btn ghost sm" onclick="showAssignmentResult('${last.id}')">Result</button>${last.progress?` <button class="btn ghost sm" onclick="showAssignmentProgress('${last.id}')">Progress</button>`:""}`:""}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students yet — add one below.</td></tr>`;
   const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
   const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${a.subject}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td></tr>`).join(""):`<tr><td colspan="4" class="muted">Nothing assigned yet.</td></tr>`;
   return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
   <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
-    <table><thead><tr><th>Student</th><th>Diagnostics</th><th>Latest result</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
+    <table><thead><tr><th>Student</th><th>Diagnostics</th><th>Latest result</th><th>Plan progress</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Add a student</h3>
     <div class="row"><div class="col"><label>Name</label><input id="t_sname" placeholder="Student name"></div>
       <div class="col"><label>School email</label><input id="t_semail" type="email" placeholder="student@school.ae"></div></div>
@@ -323,6 +331,21 @@ function showAssignmentResult(id){
     <div class="kpi"><div class="box"><div class="n">${a.score}%</div><div class="l">Overall</div></div><div class="box"><div class="n"><span class="pill ${a.levelCls||'grey'}" style="font-size:12px">${a.level||""}</span></div><div class="l">Level</div></div></div>
     <table style="margin-top:12px"><thead><tr><th>Skill</th><th>%</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
     ${a.writePrompt?`<h3 style="font-size:14px;margin:14px 0 6px">Written response</h3><div style="border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;white-space:pre-wrap">${((a.writeResponse&&a.writeResponse.trim())?a.writeResponse:"(none written)").replace(/</g,"&lt;")}</div>`:""}
+  </div></div>`; m.style.display="block";
+}
+function showAssignmentProgress(id){
+  const a=assignments().find(x=>x.id===id); const m=document.getElementById("exModal");
+  if(!a||!a.progress){ m.innerHTML=`<div class="ovl"><div class="ex"><div class="flex-between"><h2 style="margin:0">No progress yet</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div><p class="muted">This student hasn't started their skill plan activities yet.</p></div></div>`; m.style.display="block"; return; }
+  const p=a.progress, terms=[["1",p.t1||0],["2",p.t2||0],["3",p.t3||0]];
+  const chart=`<div class="chartwrap">${terms.map(([k,v])=>`<div class="colbar"><span style="font-size:11px;font-weight:700">${v}%</span><div style="display:flex;gap:4px;align-items:flex-end;height:100%;width:100%;justify-content:center"><div class="vb" style="height:${v}%"></div><div class="vb plan" style="height:100%;opacity:.5"></div></div><span style="font-size:11px;color:var(--muted)">Term ${k}</span></div>`).join("")}</div><div class="legend"><span><i style="background:var(--green)"></i>Actual completion</span><span><i style="background:var(--gold)"></i>Plan target</span></div>`;
+  const focusRows=(p.focus||[]).map(f=>`<tr><td><b>${f.skill}</b></td><td>${f.baseline}%</td><td style="width:40%"><div class="bar"><span style="width:${f.planPct}%"></span></div></td><td>${f.planPct}%</td><td><span class="pill ${f.planPct>=60?"green":f.planPct>0?"amber":"grey"}">${f.planPct>=60?"Improving":f.planPct>0?"Started":"Not started"}</span></td></tr>`).join("");
+  m.innerHTML=`<div class="ovl"><div class="ex">
+    <div class="flex-between"><h2 style="margin:0">${a.studentName} — plan progress</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div>
+    <p class="sub">${a.subject} · skill development plan${p.updatedAt?` · updated ${new Date(p.updatedAt).toLocaleDateString()}`:""}</p>
+    <div class="kpi"><div class="box"><div class="n">${p.yearPct}%</div><div class="l">Year completion</div></div><div class="box"><div class="n">${p.totalDone}/${p.totalAll}</div><div class="l">Tasks done</div></div></div>
+    <div style="margin-top:14px"><b style="font-size:14px">Completion by term</b>${chart}</div>
+    <h3 style="font-size:14px;margin:16px 0 6px">Improvement by focus skill</h3>
+    <table><thead><tr><th>Skill</th><th>Baseline</th><th>Plan progress</th><th>%</th><th>Trend</th></tr></thead><tbody>${focusRows}</tbody></table>
   </div></div>`; m.style.display="block";
 }
 function viewHome(){
