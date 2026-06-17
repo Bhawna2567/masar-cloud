@@ -168,7 +168,7 @@ function reset(){ if(READONLY) return; if(confirm("Clear this student's progress
 function syncResultToAssignment(){
   if(!(AUTH&&AUTH.role==="student")||!S.result||!S.activeAssignment) return;
   const r=S.result;
-  const payload={status:"completed",score:r.overallPct,level:r.level?r.level.name:"",levelCls:r.level?r.level.cls:"grey",skillPct:r.skillPct||{},subject:S.student.subject,writePrompt:r.writePrompt||"",writeResponse:r.writeResponse||"",completedAt:Date.now()};
+  const payload={status:"completed",score:r.overallPct,level:r.level?r.level.name:"",levelCls:r.level?r.level.cls:"grey",skillPct:r.skillPct||{},subject:S.student.subject,writePrompt:r.writePrompt||"",writeResponse:r.writeResponse||"",completedAt:Date.now(),retakeAllowed:false};
   if(S.plan){
     let totalDone=0,totalAll=0,tp={};
     ["1","2","3"].forEach(t=>{let d=0,tt=0; S.plan.terms[t].weeks.forEach(w=>w.tasks.forEach((_,i)=>{tt++; if(S.taskDone[t+"-"+w.week+"-"+i])d++;})); tp[t]=tt?Math.round(d/tt*100):0; totalDone+=d; totalAll+=tt;});
@@ -220,7 +220,7 @@ const TABS=[
 function tabEnabled(t){ if(t.always)return true; if(t.need==="student")return !!S.student; if(t.need==="result")return !!S.result; if(t.need==="plan")return !!S.plan; return true; }
 function renderTabs(){
   const el=document.getElementById("tabs"); el.innerHTML="";
-  const hideTabs=VIEWING?["home","setup","diagnostic"]:[];
+  const hideTabs=VIEWING?["home","setup","diagnostic"]:(AUTH.role==="student"?["setup"]:[]);
   TABS.forEach(t=>{
     if(hideTabs.indexOf(t.id)>=0) return;
     const b=document.createElement("button");
@@ -229,7 +229,7 @@ function renderTabs(){
     b.onclick=()=>{S.activeTab=t.id;save();render();};
     el.appendChild(b);
   });
-  const rb=document.createElement("button");rb.className="no-print";rb.style.marginLeft="auto";if(VIEWING){rb.textContent="← Back";rb.onclick=teacherCloseStudent;}else{rb.textContent="↺ Reset";rb.onclick=reset;}el.appendChild(rb);
+  if(VIEWING){const rb=document.createElement("button");rb.className="no-print";rb.style.marginLeft="auto";rb.textContent="← Back";rb.onclick=teacherCloseStudent;el.appendChild(rb);}
 }
 
 function render(){
@@ -299,7 +299,7 @@ function viewTeacher(){
       <td>${last?`<button class="btn sm" onclick="teacherOpenStudent('${last.id}')">Open →</button> `:""}<button class="btn ghost sm" onclick="removeStudent('${s.email}')">Remove</button></td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students yet — add one below.</td></tr>`;
   const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
-  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td><td><button class="btn ghost sm" onclick="deleteAssignment('${a.id}')">Delete</button></td></tr>`).join(""):`<tr><td colspan="5" class="muted">Nothing assigned yet.</td></tr>`;
+  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td><td>${a.status==="completed"?`<button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake allowed ✓":"Allow retake"}</button> `:""}<button class="btn ghost sm" onclick="deleteAssignment('${a.id}')">Delete</button></td></tr>`).join(""):`<tr><td colspan="5" class="muted">Nothing assigned yet.</td></tr>`;
   return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
   ${classCard()}
   <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
@@ -384,6 +384,13 @@ function removeStudent(email){
 function deleteAssignment(id){
   if(!confirm("Delete this diagnostic and its result permanently? This cannot be undone."))return;
   db.collection("assignments").doc(id).delete().catch(e=>alert(fbErr(e)));
+}
+function allowRetake(id){
+  const a=assignments().find(x=>x.id===id); if(!a)return;
+  const now=!a.retakeAllowed;
+  db.collection("assignments").doc(id).update({retakeAllowed:now})
+    .then(()=>{ if(now) alert("Retake unlocked — the student can now redo this diagnostic once."); })
+    .catch(e=>alert(fbErr(e)));
 }
 function deleteClass(id){
   if(!confirm("Delete this class and all the diagnostics created in it? This cannot be undone."))return;
@@ -502,7 +509,7 @@ function viewClass(id){
   const rosterRows=ca.length?ca.slice().sort((a,b)=>(b.score||0)-(a.score||0)).map(a=>{
     const st=a.status==="completed"?`<span class="pill ${a.levelCls||rag(a.score||0)}">${a.score}% · ${a.level||""}</span>`:`<span class="pill amber">Pending</span>`;
     const flag=flaggedIds[a.id]?`<span class="pill red">Needs support</span>`:(a.status==="completed"?`<span class="pill green">On track</span>`:`<span class="muted">—</span>`);
-    const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button>`:"";
+    const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake ✓":"Allow retake"}</button>`:"";
     return `<tr><td><b>${a.studentName||a.studentEmail}</b><div class="muted" style="font-size:11px">${a.studentEmail}</div></td><td>${st}</td><td>${flag}</td><td>${btn}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students yet. Share the join code or add students below.</td></tr>`;
   const benchmark=80;
@@ -546,7 +553,7 @@ function viewHome(){
   const me=AUTH, my=assignments();
   const rows=my.length?my.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>{
     const status=a.status==="completed"?`<span class="pill green">Completed · ${a.score}%</span>`:`<span class="pill amber">Not started</span>`;
-    const btn=a.status==="completed"?`<button class="btn ghost sm" onclick="showAssignmentResult('${a.id}')">View results</button> <button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Retake</button>`:`<button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Start test</button>`;
+    const btn=a.status==="completed"?`<button class="btn ghost sm" onclick="showAssignmentResult('${a.id}')">View results</button>${a.retakeAllowed?` <button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Retake (allowed)</button>`:` <span class="muted" style="font-size:11px">Completed — ask your teacher to allow a retake</span>`}`:`<button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Start test</button>`;
     return `<tr><td>${subjChip(a.subject)}<div class="muted" style="font-size:11px;margin-top:4px">shared by ${a.teacherName||a.teacherEmail}</div></td><td>Based on ${gLabel(a.prevGrade)}</td><td>${status}</td><td>${btn}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No tests assigned yet. Your teacher will share a diagnostic with you here.</td></tr>`;
   return `<div class="card"><h2>Welcome, ${(me.name||'').split(' ')[0]} 👋</h2><p class="sub">${me.email} · Student dashboard</p></div>
@@ -566,6 +573,7 @@ function viewHome(){
 function openAssignment(id,completed){
   const a=assignments().find(x=>x.id===id); if(!a)return;
   if(completed){ showAssignmentResult(id); return; }
+  if(a.status==="completed" && !a.retakeAllowed){ alert("You've already completed this diagnostic. Ask your teacher to allow a retake."); return; }
   S.activeAssignment=id;
   S.student={name:AUTH.name,subject:a.subject,prevGrade:a.prevGrade,curGrade:a.curGrade};
   S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";S.activeTab="diagnostic";
