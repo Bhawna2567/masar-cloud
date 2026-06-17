@@ -296,10 +296,10 @@ function viewTeacher(){
       <td>${sa.length} assigned · ${done.length} done</td>
       <td>${last?`${last.score}% · ${last.level||""}`:"—"}</td>
       <td>${(last&&last.progress)?`${last.progress.yearPct}% <span class="muted" style="font-size:10px">(${last.progress.totalDone}/${last.progress.totalAll})</span>`:"—"}</td>
-      <td>${last?`<button class="btn sm" onclick="teacherOpenStudent('${last.id}')">Open dashboard →</button>`:""}</td></tr>`;
+      <td>${last?`<button class="btn sm" onclick="teacherOpenStudent('${last.id}')">Open →</button> `:""}<button class="btn ghost sm" onclick="removeStudent('${s.email}')">Remove</button></td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students yet — add one below.</td></tr>`;
   const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
-  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td></tr>`).join(""):`<tr><td colspan="4" class="muted">Nothing assigned yet.</td></tr>`;
+  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td><td><button class="btn ghost sm" onclick="deleteAssignment('${a.id}')">Delete</button></td></tr>`).join(""):`<tr><td colspan="5" class="muted">Nothing assigned yet.</td></tr>`;
   return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
   ${classCard()}
   <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
@@ -318,7 +318,8 @@ function viewTeacher(){
       <div class="col"><label>Current grade</label><select id="as_cur">${grades}</select></div></div>
     <div style="margin-top:12px"><button class="btn gold" onclick="assignDiagnostic()">Assign &amp; share</button> <span id="amsg" style="font-size:12px;color:var(--ok)"></span></div>`:`<p class="muted">Add a student first.</p>`}
   </div>
-  <div class="card"><h2>Assigned diagnostics</h2><table><thead><tr><th>Student</th><th>Subject</th><th>Grades</th><th>Status</th></tr></thead><tbody>${assignRows}</tbody></table></div>`;
+  <div class="card"><h2>Assigned diagnostics</h2><table><thead><tr><th>Student</th><th>Subject</th><th>Grades</th><th>Status</th><th></th></tr></thead><tbody>${assignRows}</tbody></table></div>
+  <div class="card" style="border:1px solid #f3c8cc"><h2>Reset dashboard</h2><p class="sub">Permanently delete all your students, classes and diagnostics to start fresh. This cannot be undone.</p><button class="btn" style="background:var(--red)" onclick="resetDashboard()">Reset everything</button></div>`;
 }
 function addStudent(){
   const name=document.getElementById("t_sname").value.trim(), email=document.getElementById("t_semail").value.trim().toLowerCase();
@@ -375,6 +376,30 @@ function teacherOpenStudent(id){
   render();
 }
 function teacherCloseStudent(){ VIEWING=null; READONLY=false; S=freshState(); render(); }
+function removeStudent(email){
+  if(!confirm("Remove this student from your roster?\n\n(Their diagnostics are kept — delete those separately if you also want them gone.)"))return;
+  const list=(AUTH.students||[]).filter(s=>s.email!==email);
+  db.collection("users").doc(AUTH.uid).update({students:list}).catch(e=>alert(fbErr(e)));
+}
+function deleteAssignment(id){
+  if(!confirm("Delete this diagnostic and its result permanently? This cannot be undone."))return;
+  db.collection("assignments").doc(id).delete().catch(e=>alert(fbErr(e)));
+}
+function deleteClass(id){
+  if(!confirm("Delete this class and all the diagnostics created in it? This cannot be undone."))return;
+  const cas=assignments().filter(a=>a.classId===id);
+  Promise.all([db.collection("classes").doc(id).delete().catch(()=>{})].concat(cas.map(a=>db.collection("assignments").doc(a.id).delete().catch(()=>{})))).then(()=>{S.openClassId=null;render();}).catch(e=>alert(fbErr(e)));
+}
+function resetDashboard(){
+  if(!confirm("Reset your WHOLE dashboard?\n\nThis permanently deletes ALL your students, classes and diagnostics."))return;
+  if(!confirm("Are you absolutely sure? Every diagnostic result you've created will be gone for good."))return;
+  const as=assignments().slice(), cs=classesList().slice();
+  Promise.all(
+    as.map(a=>db.collection("assignments").doc(a.id).delete().catch(()=>{}))
+      .concat(cs.map(c=>db.collection("classes").doc(c.id).delete().catch(()=>{})))
+      .concat([db.collection("users").doc(AUTH.uid).update({students:[]}).catch(()=>{})])
+  ).then(()=>{S.openClassId=null;alert("Your dashboard has been reset.");}).catch(e=>alert(fbErr(e)));
+}
 
 /* ============================================================
    CLASSES — a teacher gives one diagnostic to a whole class;
@@ -414,7 +439,7 @@ function classCard(){
     const ca=as.filter(a=>a.classId===c.id), done=ca.filter(a=>a.status==="completed");
     const avg=done.length?Math.round(done.reduce((s,a)=>s+(a.score||0),0)/done.length):null;
     const flagged=flaggedFor(c.id).length;
-    return `<tr><td><b>${c.name}</b><div class="muted" style="font-size:11px">Join code <b style="letter-spacing:1px">${c.joinCode}</b></div></td><td>${subjChip(c.subject)}</td><td>${gLabel(c.prevGrade)} → ${gLabel(c.curGrade)}</td><td>${ca.length} students · ${done.length} done</td><td>${avg!=null?avg+"%":"—"}</td><td>${flagged?`<span class="pill red">${flagged} flagged</span>`:(done.length?`<span class="pill green">All on track</span>`:`<span class="muted">—</span>`)}</td><td><button class="btn sm" onclick="openClass('${c.id}')">Open class →</button></td></tr>`;
+    return `<tr><td><b>${c.name}</b><div class="muted" style="font-size:11px">Join code <b style="letter-spacing:1px">${c.joinCode}</b></div></td><td>${subjChip(c.subject)}</td><td>${gLabel(c.prevGrade)} → ${gLabel(c.curGrade)}</td><td>${ca.length} students · ${done.length} done</td><td>${avg!=null?avg+"%":"—"}</td><td>${flagged?`<span class="pill red">${flagged} flagged</span>`:(done.length?`<span class="pill green">All on track</span>`:`<span class="muted">—</span>`)}</td><td><button class="btn sm" onclick="openClass('${c.id}')">Open →</button> <button class="btn ghost sm" onclick="deleteClass('${c.id}')">Delete</button></td></tr>`;
   }).join(""):`<tr><td colspan="7" class="muted">No classes yet. Create one to give a whole class the same diagnostic.</td></tr>`;
   return `<div class="card"><h2>My classes</h2><p class="sub">Create a class, share its join code (or add students), and the whole class takes one diagnostic. Adeptly automatically flags who needs skill development.</p>
     <table><thead><tr><th>Class</th><th>Subject</th><th>Grades</th><th>Enrolment</th><th>Avg</th><th>Flagged</th><th></th></tr></thead><tbody>${rows}</tbody></table>
