@@ -1,4 +1,4 @@
-# Masar — Cloud version (real logins + cross-device sharing)
+# Adeptly — Cloud version (real logins + cross-device sharing)
 
 This version uses **Firebase** for real accounts and a shared database, so a teacher can
 assign a test on her device and a student opens it on **their own** device — and results
@@ -29,7 +29,7 @@ You set this up once. It's free for this scale (Firebase Spark plan).
 ## Step 5 — Put it online (so people can reach it)
 Easiest: **Netlify Drop**.
 1. Go to **app.netlify.com/drop**.
-2. Drag this whole **Masar-Cloud** folder onto the page.
+2. Drag this whole **Adeptly-Cloud** folder onto the page.
 3. You get a live URL like `https://your-name.netlify.app` — that's your app.
 
 (Alternatively use Firebase Hosting or any static host.)

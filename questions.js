@@ -1,4 +1,4 @@
-/* Masar diagnostic question banks — keyed by grade then subject. */
+/* Adeptly diagnostic question banks — keyed by grade then subject. */
 var QUESTION_BANK = {
  "6": {
   "English": [

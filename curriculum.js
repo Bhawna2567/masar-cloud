@@ -1,4 +1,4 @@
-/* Masar curriculum data — auto-generated from the official MOE files.
+/* Adeptly curriculum data — auto-generated from the official MOE files.
    English Terms 1-3 parsed from grade PDFs.  Maths 9-12 from Scope & Sequence spreadsheets;
    Maths 6-8 translated from the Arabic Comprehensive Guides, grouped by domain. */
 var CURRICULUM = {

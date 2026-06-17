@@ -1,4 +1,4 @@
-/* Masar — Firebase project config (masar-22cd5). */
+/* Adeptly — Firebase project config (masar-22cd5). */
 var firebaseConfig = {
   apiKey: "AIzaSyA3LO2k3Rn2cMGZJz1Kk_udnm3F8iL5lx4",
   authDomain: "masar-22cd5.firebaseapp.com",
