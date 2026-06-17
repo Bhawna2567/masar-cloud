@@ -316,6 +316,9 @@ function viewTeacher(){
     <div class="row" style="margin-top:10px">
       <div class="col"><label>Diagnostic grade (previous)</label><select id="as_prev">${grades}</select></div>
       <div class="col"><label>Current grade</label><select id="as_cur">${grades}</select></div></div>
+    <div class="row" style="margin-top:10px">
+      <div class="col"><label>Term</label><select id="as_term"><option value="1">Term 1</option><option value="2">Term 2</option><option value="3">Term 3</option></select></div>
+      <div class="col"><label>Publish date (calendar) — optional</label><input type="date" id="as_date"></div></div>
     <div style="margin-top:12px"><button class="btn gold" onclick="assignDiagnostic()">Assign &amp; share</button> <span id="amsg" style="font-size:12px;color:var(--ok)"></span></div>`:`<p class="muted">Add a student first.</p>`}
   </div>
   <div class="card"><h2>Assigned diagnostics</h2><table><thead><tr><th>Student</th><th>Subject</th><th>Grades</th><th>Status</th><th></th></tr></thead><tbody>${assignRows}</tbody></table></div>
@@ -331,8 +334,9 @@ function addStudent(){
 function assignDiagnostic(){
   const studentEmail=document.getElementById("as_student").value, subject=document.getElementById("as_subject").value;
   const prevGrade=document.getElementById("as_prev").value, curGrade=document.getElementById("as_cur").value;
+  const term=document.getElementById("as_term").value, publishDate=document.getElementById("as_date").value||"";
   const s=(AUTH.students||[]).find(x=>x.email===studentEmail);
-  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:subject,prevGrade:prevGrade,curGrade:curGrade,status:"pending",createdAt:Date.now()})
+  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:subject,prevGrade:prevGrade,curGrade:curGrade,term:term,publishDate:publishDate,status:"pending",createdAt:Date.now()})
     .then(()=>{const m=document.getElementById("amsg"); if(m)m.textContent="Assigned! It is now on the student's dashboard.";})
     .catch(e=>{const m=document.getElementById("amsg"); if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
@@ -414,15 +418,19 @@ function resetDashboard(){
    comparative analysis and activities for each.
    ============================================================ */
 function genCode(){var c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",s="";for(var i=0;i<6;i++)s+=c.charAt(Math.floor(Math.random()*c.length));return s;}
-function classCompleted(id){return assignments().filter(a=>a.classId===id&&a.status==="completed");}
-function classSkillAvg(id){
+function todayISO(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function fmtDate(s){ if(!s)return ""; const dt=new Date(s+"T00:00:00"); return isNaN(dt)?s:dt.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }
+function aTerm(a){return String((a&&a.term)||"1");}
+function isPublished(a){ return !a.publishDate || a.publishDate<=todayISO(); }
+function classCompleted(id,term){return assignments().filter(a=>a.classId===id&&a.status==="completed"&&(!term||aTerm(a)===String(term)));}
+function classSkillAvg(id,term){
   const c=classesList().find(x=>x.id===id); if(!c)return {};
-  const done=classCompleted(id), areas=skillsFor(c.subject), out={};
+  const done=classCompleted(id,term), areas=skillsFor(c.subject), out={};
   areas.forEach(k=>{let s=0,n=0;done.forEach(a=>{const v=(a.skillPct||{})[k];if(v!=null){s+=v;n++;}});out[k]=n?Math.round(s/n):null;});
   return out;
 }
-function flaggedFor(id){
-  const done=classCompleted(id); if(!done.length)return [];
+function flaggedFor(id,term){
+  const done=classCompleted(id,term); if(!done.length)return [];
   const sorted=done.slice().sort((a,b)=>(a.score||0)-(b.score||0));
   const bottomN=Math.max(1,Math.ceil(done.length*0.3)), bottomIds={};
   sorted.slice(0,bottomN).forEach(a=>bottomIds[a.id]=true);
@@ -440,31 +448,44 @@ function computeGoalsFor(a){
   return focus.map(k=>{const b=sp[k]||0;const t1=Math.min(90,Math.max(b+15,55)),t2=Math.min(95,Math.max(t1+10,65)),t3=Math.min(98,Math.max(t2+10,75));return {skill:k,baseline:b,t1:t1,t2:t2,t3:t3,statement:`Improve ${k} from ${b}% to ${t3}% across the three terms.`};});
 }
 function classCard(){
-  const as=assignments(), cs=classesList();
+  const as=assignments(); let cs=classesList();
+  const fSub=S.fSubject||"";
+  if(fSub) cs=cs.filter(c=>c.subject===fSub);
   const grades=GRADES.map(g=>`<option value="${g.id}">${g.label}</option>`).join("");
   const rows=cs.length?cs.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(c=>{
     const ca=as.filter(a=>a.classId===c.id), done=ca.filter(a=>a.status==="completed");
+    const students=new Set(ca.map(a=>a.studentEmail)).size;
     const avg=done.length?Math.round(done.reduce((s,a)=>s+(a.score||0),0)/done.length):null;
     const flagged=flaggedFor(c.id).length;
-    return `<tr><td><b>${c.name}</b><div class="muted" style="font-size:11px">Join code <b style="letter-spacing:1px">${c.joinCode}</b></div></td><td>${subjChip(c.subject)}</td><td>${gLabel(c.prevGrade)} → ${gLabel(c.curGrade)}</td><td>${ca.length} students · ${done.length} done</td><td>${avg!=null?avg+"%":"—"}</td><td>${flagged?`<span class="pill red">${flagged} flagged</span>`:(done.length?`<span class="pill green">All on track</span>`:`<span class="muted">—</span>`)}</td><td><button class="btn sm" onclick="openClass('${c.id}')">Open →</button> <button class="btn ghost sm" onclick="deleteClass('${c.id}')">Delete</button></td></tr>`;
-  }).join(""):`<tr><td colspan="7" class="muted">No classes yet. Create one to give a whole class the same diagnostic.</td></tr>`;
-  return `<div class="card"><h2>My classes</h2><p class="sub">Create a class, share its join code (or add students), and the whole class takes one diagnostic. Adeptly automatically flags who needs skill development.</p>
-    <table><thead><tr><th>Class</th><th>Subject</th><th>Grades</th><th>Enrolment</th><th>Avg</th><th>Flagged</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    const td=c.termDates||{};
+    const sched=[1,2,3].map(t=>td[t]?`T${t} ${fmtDate(td[t])}`:`T${t} —`).join("<br>");
+    return `<tr><td><b>${c.name}</b><div class="muted" style="font-size:11px">Join code <b style="letter-spacing:1px">${c.joinCode}</b></div></td><td>${subjChip(c.subject)}</td><td style="font-size:11px;line-height:1.6">${sched}</td><td>${students} students · ${done.length} done</td><td>${avg!=null?avg+"%":"—"}</td><td>${flagged?`<span class="pill red">${flagged} flagged</span>`:(done.length?`<span class="pill green">All on track</span>`:`<span class="muted">—</span>`)}</td><td><button class="btn sm" onclick="openClass('${c.id}')">Open →</button> <button class="btn ghost sm" onclick="deleteClass('${c.id}')">Delete</button></td></tr>`;
+  }).join(""):`<tr><td colspan="7" class="muted">No classes${fSub?" for this subject":" yet. Create one below"}.</td></tr>`;
+  return `<div class="card"><div class="flex-between"><h2 style="margin:0">My classes</h2>
+      <div><label style="display:inline;margin-right:6px">Subject</label><select style="width:auto;display:inline-block" onchange="setFilterSubject(this.value)"><option value="" ${!fSub?"selected":""}>All</option><option value="English" ${fSub==="English"?"selected":""}>English</option><option value="Math" ${fSub==="Math"?"selected":""}>Mathematics</option></select></div></div>
+    <p class="sub">Create a class, set when each term's diagnostic publishes, and share the join code. The class takes one diagnostic per term; Adeptly flags who needs skill development.</p>
+    <table><thead><tr><th>Class</th><th>Subject</th><th>Term schedule</th><th>Enrolment</th><th>Avg</th><th>Flagged</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Create a class</h3>
     <div class="row"><div class="col"><label>Class name</label><input id="c_name" placeholder="e.g. Grade 7B — English"></div>
       <div class="col"><label>Subject</label><select id="c_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div></div>
     <div class="row" style="margin-top:10px"><div class="col"><label>Diagnostic grade (previous)</label><select id="c_prev">${grades}</select></div>
       <div class="col"><label>Current grade</label><select id="c_cur">${grades}</select></div></div>
+    <label style="margin-top:12px">Publish dates — pick when each term's diagnostic opens (calendar)</label>
+    <div class="row"><div class="col"><label style="font-weight:600;text-transform:none">Term 1</label><input type="date" id="c_t1"></div>
+      <div class="col"><label style="font-weight:600;text-transform:none">Term 2</label><input type="date" id="c_t2"></div>
+      <div class="col"><label style="font-weight:600;text-transform:none">Term 3</label><input type="date" id="c_t3"></div></div>
     <div style="margin-top:12px"><button class="btn" onclick="createClass()">+ Create class</button> <span id="cmsg" style="font-size:12px;color:var(--ok)"></span></div>
   </div>`;
 }
+function setFilterSubject(v){S.fSubject=v;render();}
 function createClass(){
   const name=document.getElementById("c_name").value.trim();
   const subject=document.getElementById("c_subject").value, prev=document.getElementById("c_prev").value, cur=document.getElementById("c_cur").value;
   const msg=document.getElementById("cmsg");
   if(!name){msg.style.color="var(--red)";msg.textContent="Enter a class name.";return;}
   msg.style.color="var(--muted)";msg.textContent="Creating…";
-  db.collection("classes").add({teacherUid:AUTH.uid,teacherName:AUTH.name,name:name,subject:subject,prevGrade:prev,curGrade:cur,joinCode:genCode(),createdAt:Date.now()})
+  const termDates={1:document.getElementById("c_t1").value||"",2:document.getElementById("c_t2").value||"",3:document.getElementById("c_t3").value||""};
+  db.collection("classes").add({teacherUid:AUTH.uid,teacherName:AUTH.name,name:name,subject:subject,prevGrade:prev,curGrade:cur,joinCode:genCode(),termDates:termDates,createdAt:Date.now()})
     .then(()=>{const m=document.getElementById("cmsg");if(m){m.style.color="var(--ok)";m.textContent="Class created — share its join code.";}})
     .catch(e=>{const m=document.getElementById("cmsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
@@ -477,9 +498,10 @@ function addToClass(id){
   if(!name||!email){msg.style.color="var(--red)";msg.textContent="Enter name and email.";return;}
   if(assignments().find(a=>a.classId===id&&a.studentEmail===email)){msg.style.color="var(--red)";msg.textContent="That student is already in this class.";return;}
   msg.style.color="var(--muted)";msg.textContent="Adding…";
-  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,status:"pending",createdAt:Date.now()})
+  const td=c.termDates||{};
+  Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",status:"pending",createdAt:Date.now()})))
     .then(()=>db.collection("users").doc(AUTH.uid).update({students:firebase.firestore.FieldValue.arrayUnion({name:name,email:email})}).catch(()=>{}))
-    .then(()=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--ok)";m.textContent="Added — the test is on their dashboard.";}})
+    .then(()=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--ok)";m.textContent="Added — all three term diagnostics are on their dashboard.";}})
     .catch(e=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
 function joinClass(){
@@ -492,26 +514,31 @@ function joinClass(){
     if(qs.empty){if(m){m.style.color="var(--red)";m.textContent="No class found with that code.";}return;}
     const d=qs.docs[0], c=Object.assign({id:d.id},d.data());
     if(assignments().find(a=>a.classId===c.id)){if(m){m.style.color="var(--red)";m.textContent="You're already in "+c.name+".";}return;}
-    return db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,status:"pending",createdAt:Date.now()})
-      .then(()=>{const m2=document.getElementById("joinMsg");if(m2){m2.style.color="var(--ok)";m2.textContent="Joined "+c.name+"! Your test is in the list below.";}});
+    const td=c.termDates||{};
+    return Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",status:"pending",createdAt:Date.now()})))
+      .then(()=>{const m2=document.getElementById("joinMsg");if(m2){m2.style.color="var(--ok)";m2.textContent="Joined "+c.name+"! Your term diagnostics are in the list below.";}});
   }).catch(e=>{const m=document.getElementById("joinMsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
 function viewClass(id){
   const c=classesList().find(x=>x.id===id);
   if(!c){S.openClassId=null;return viewTeacher();}
-  const ca=assignments().filter(a=>a.classId===id);
+  const term=String(S.classTerm||"1");
+  const td=c.termDates||{};
+  const caAll=assignments().filter(a=>a.classId===id);
+  const ca=caAll.filter(a=>aTerm(a)===term);
   const done=ca.filter(a=>a.status==="completed");
   const areas=skillsFor(c.subject);
   const avg=done.length?Math.round(done.reduce((s,a)=>s+(a.score||0),0)/done.length):null;
-  const skAvg=classSkillAvg(id);
-  const flagged=flaggedFor(id);
+  const skAvg=classSkillAvg(id,term);
+  const flagged=flaggedFor(id,term);
   const flaggedIds={}; flagged.forEach(a=>flaggedIds[a.id]=true);
+  const students=new Set(caAll.map(a=>a.studentEmail)).size;
   const rosterRows=ca.length?ca.slice().sort((a,b)=>(b.score||0)-(a.score||0)).map(a=>{
-    const st=a.status==="completed"?`<span class="pill ${a.levelCls||rag(a.score||0)}">${a.score}% · ${a.level||""}</span>`:`<span class="pill amber">Pending</span>`;
+    const st=a.status==="completed"?`<span class="pill ${a.levelCls||rag(a.score||0)}">${a.score}% · ${a.level||""}</span>`:(isPublished(a)?`<span class="pill amber">Pending</span>`:`<span class="pill grey">Opens ${fmtDate(a.publishDate)}</span>`);
     const flag=flaggedIds[a.id]?`<span class="pill red">Needs support</span>`:(a.status==="completed"?`<span class="pill green">On track</span>`:`<span class="muted">—</span>`);
     const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake ✓":"Allow retake"}</button>`:"";
     return `<tr><td><b>${a.studentName||a.studentEmail}</b><div class="muted" style="font-size:11px">${a.studentEmail}</div></td><td>${st}</td><td>${flag}</td><td>${btn}</td></tr>`;
-  }).join(""):`<tr><td colspan="4" class="muted">No students yet. Share the join code or add students below.</td></tr>`;
+  }).join(""):`<tr><td colspan="4" class="muted">No students enrolled for Term ${term} yet.</td></tr>`;
   const benchmark=80;
   const detail=flagged.length?flagged.slice().sort((a,b)=>(a.score||0)-(b.score||0)).map(a=>{
     const sp=a.skillPct||{};
@@ -525,55 +552,93 @@ function viewClass(id){
     const act=focusSkills.length?`<p style="font-size:13px;margin:10px 0 6px"><b>Targeted activities</b> for: ${focusSkills.map(s=>`<span class="tag">${s}</span>`).join(" ")}</p><p class="muted" style="font-size:12px;margin:0">Weekly practice exercises and games for these skills are generated in the student's plan. ${a.snapshot?`<a href="#" onclick="teacherOpenStudent('${a.id}');return false">Open their full plan &amp; activities →</a>`:"They appear once the student opens their Skill Development Plan."}</p>`:"";
     return `<div class="card" style="border-left:4px solid var(--red)">
       <div class="flex-between"><h3 style="margin:0;font-size:16px">${a.studentName||a.studentEmail}</h3><div>${a._reasons.map(r=>`<span class="pill red" style="margin-left:4px">${r}</span>`).join("")}</div></div>
-      <p class="sub" style="margin:6px 0 12px">Overall ${a.score}% · diagnostic measured ${gLabel(c.prevGrade)} mastery · ${gLabel(c.curGrade)} expects ≥80% across skills</p>
+      <p class="sub" style="margin:6px 0 12px">Term ${term} · overall ${a.score}% · measured ${gLabel(c.prevGrade)} mastery · ${gLabel(c.curGrade)} expects ≥80%</p>
       <b style="font-size:13px">Comparative analysis</b>
       <table style="margin:6px 0 4px"><thead><tr><th>Skill</th><th>Student</th><th>Class avg</th><th>Benchmark</th><th>Status</th><th>vs class</th></tr></thead><tbody>${compRows}</tbody></table>
       <div style="margin:10px 0 12px"><b style="font-size:13px">🎯 Goals</b><div style="margin-top:6px">${goalRows}</div></div>
       ${act}
     </div>`;
-  }).join(""):(done.length?`<div class="card"><p class="muted" style="margin:0">No students currently flagged — the whole class is at or above grade level. 🎉</p></div>`:`<div class="card"><p class="muted" style="margin:0">No completed tests yet. As students take the diagnostic, those needing skill development appear here automatically.</p></div>`);
+  }).join(""):(done.length?`<div class="card"><p class="muted" style="margin:0">No students flagged for Term ${term} — everyone is at or above grade level. 🎉</p></div>`:`<div class="card"><p class="muted" style="margin:0">No completed Term ${term} tests yet. As students take this term's diagnostic, those needing skill development appear here automatically.</p></div>`);
+  const termSel=`<select style="width:auto;display:inline-block" onchange="setClassTerm(this.value)">${[1,2,3].map(t=>`<option value="${t}" ${term===String(t)?"selected":""}>Term ${t}${td[t]?" · "+fmtDate(td[t]):""}</option>`).join("")}</select>`;
   return `<div class="card"><div class="flex-between"><h2 style="margin:0">${c.name}</h2><button class="btn ghost sm" onclick="closeClass()">← All classes</button></div>
     <p class="sub">${subjChip(c.subject)} · ${gLabel(c.prevGrade)} → ${gLabel(c.curGrade)}</p>
+    <div class="flex-between" style="margin:10px 0;gap:10px;flex-wrap:wrap"><div><label style="display:inline;margin-right:8px">View term</label>${termSel}</div>
+      <div class="muted" style="font-size:12px">${td[term]?`Term ${term} ${td[term]<=todayISO()?"opened":"opens"} ${fmtDate(td[term])}`:`Term ${term} — no publish date set`}</div></div>
     <div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#eef2ff;border-color:#d6dbff;color:var(--ink)">Join code: <b style="font-size:18px;letter-spacing:2px">${c.joinCode}</b> <span class="muted" style="font-size:12px">— students enter this under “Join a class” on their dashboard</span></div>
-    <div class="kpi"><div class="box"><div class="n">${ca.length}</div><div class="l">Enrolled</div></div><div class="box"><div class="n">${done.length}</div><div class="l">Completed</div></div><div class="box"><div class="n">${avg!=null?avg+"%":"—"}</div><div class="l">Class average</div></div><div class="box"><div class="n" style="color:var(--red)">${flagged.length}</div><div class="l">Need support</div></div></div>
+    <div class="kpi"><div class="box"><div class="n">${students}</div><div class="l">Enrolled</div></div><div class="box"><div class="n">${done.length}</div><div class="l">Term ${term} done</div></div><div class="box"><div class="n">${avg!=null?avg+"%":"—"}</div><div class="l">Term ${term} average</div></div><div class="box"><div class="n" style="color:var(--red)">${flagged.length}</div><div class="l">Need support</div></div></div>
+    <h3 style="font-size:14px;margin:16px 0 6px">Term schedule — publish dates (calendar)</h3>
+    <div class="row">${[1,2,3].map(t=>`<div class="col"><label style="font-weight:600;text-transform:none">Term ${t}</label><input type="date" value="${td[t]||""}" onchange="updateTermDate('${c.id}','${t}',this.value)"></div>`).join("")}</div>
+    <p class="muted" style="font-size:11px;margin-top:6px">Changing a date updates when that term's diagnostic opens for every student in the class.</p>
   </div>
-  <div class="card"><h2>Class roster</h2><p class="sub">Same diagnostic for everyone, ranked by score. Results update live as students finish.</p>
+  <div class="card"><h2>Class roster — Term ${term}</h2><p class="sub">Same diagnostic for everyone this term, ranked by score. Results update live as students finish.</p>
     <table><thead><tr><th>Student</th><th>Result</th><th>Status</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Add a student to this class</h3>
     <div class="row"><div class="col"><label>Name</label><input id="cs_name" placeholder="Student name"></div><div class="col"><label>School email</label><input id="cs_email" type="email" placeholder="student@school.ae"></div></div>
     <div style="margin-top:10px"><button class="btn" onclick="addToClass('${c.id}')">+ Add to class</button> <span id="csmsg" style="font-size:12px;color:var(--ok)"></span></div>
   </div>
-  ${done.length?`<div class="card"><h2>Class skill averages</h2><p class="sub">Average mastery per ${c.subject==="Math"?"strand":"skill"} across ${done.length} completed test(s).</p>
+  ${done.length?`<div class="card"><h2>Class skill averages — Term ${term}</h2><p class="sub">Average mastery per ${c.subject==="Math"?"strand":"skill"} across ${done.length} completed test(s).</p>
     ${areas.map(k=>{const v=skAvg[k];return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px"><span style="width:140px;font-size:13px;color:var(--muted)">${k}</span><div class="bar" style="flex:1"><span style="width:${v||0}%;background:${v!=null&&v<55?'var(--red)':v!=null&&v<80?'var(--amber)':'var(--ok)'}"></span></div><span style="width:42px;text-align:right;font-size:13px;font-weight:700">${v!=null?v+"%":"—"}</span></div>`;}).join("")}
   </div>`:""}
-  <div class="card"><h2>Students needing skill development</h2><p class="sub">Auto-filtered: below grade level (under 80%) <b>or</b> in the bottom 30% of the class. Each card has a comparative analysis, measurable goals, and targeted activities.</p></div>
+  <div class="card"><h2>Students needing skill development — Term ${term}</h2><p class="sub">Auto-filtered: below grade level (under 80%) <b>or</b> in the bottom 30% of the class. Each card has a comparative analysis, measurable goals, and targeted activities for this term.</p></div>
   ${detail}`;
 }
+function setClassTerm(t){S.classTerm=String(t);render();}
+function updateTermDate(id,term,val){
+  const c=classesList().find(x=>x.id===id); if(!c)return;
+  const ntd=Object.assign({},c.termDates||{}); ntd[term]=val||"";
+  db.collection("classes").doc(id).update({termDates:ntd}).catch(e=>alert(fbErr(e)));
+  assignments().filter(a=>a.classId===id&&aTerm(a)===String(term)).forEach(a=>{ if(a.status!=="completed") db.collection("assignments").doc(a.id).update({publishDate:val||""}).catch(()=>{}); });
+}
 function viewHome(){
-  const me=AUTH, my=assignments();
-  const rows=my.length?my.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>{
-    const status=a.status==="completed"?`<span class="pill green">Completed · ${a.score}%</span>`:`<span class="pill amber">Not started</span>`;
-    const btn=a.status==="completed"?`<button class="btn ghost sm" onclick="showAssignmentResult('${a.id}')">View results</button>${a.retakeAllowed?` <button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Retake (allowed)</button>`:` <span class="muted" style="font-size:11px">Completed — ask your teacher to allow a retake</span>`}`:`<button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Start test</button>`;
-    return `<tr><td>${subjChip(a.subject)}<div class="muted" style="font-size:11px;margin-top:4px">shared by ${a.teacherName||a.teacherEmail}</div></td><td>Based on ${gLabel(a.prevGrade)}</td><td>${status}</td><td>${btn}</td></tr>`;
-  }).join(""):`<tr><td colspan="4" class="muted">No tests assigned yet. Your teacher will share a diagnostic with you here.</td></tr>`;
+  const me=AUTH;
+  const fSub=S.sSubject||"", fTerm=S.sTerm||"";
+  let list=assignments().slice();
+  if(fSub) list=list.filter(a=>a.subject===fSub);
+  if(fTerm) list=list.filter(a=>aTerm(a)===fTerm);
+  list.sort((a,b)=>{const ca=(a.className||"~"),cb=(b.className||"~"); if(ca!==cb)return ca.localeCompare(cb); const ta=aTerm(a),tb=aTerm(b); if(ta!==tb)return ta.localeCompare(tb); return (b.createdAt||0)-(a.createdAt||0);});
+  const rows=list.length?list.map(a=>{
+    const meta=`<div class="muted" style="font-size:11px;margin-top:3px"><span class="tag">Term ${aTerm(a)}</span> ${a.publishDate?fmtDate(a.publishDate):"Available now"}${a.className?` · ${a.className}`:""}</div>`;
+    let status, btn;
+    if(a.status==="completed"){
+      status=`<span class="pill green">Completed · ${a.score}%</span>`;
+      btn=`<button class="btn ghost sm" onclick="openCompleted('${a.id}')">View results</button>${a.retakeAllowed?` <button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Retake (allowed)</button>`:""}`;
+    } else if(!isPublished(a)){
+      status=`<span class="pill grey">Opens ${fmtDate(a.publishDate)}</span>`;
+      btn=`<button class="btn gold sm" disabled>Opens ${fmtDate(a.publishDate)}</button>`;
+    } else {
+      status=`<span class="pill amber">Not started</span>`;
+      btn=`<button class="btn gold sm" onclick="openAssignment('${a.id}',false)">Start test</button>`;
+    }
+    return `<tr><td>${subjChip(a.subject)}${meta}<div class="muted" style="font-size:11px">shared by ${a.teacherName||a.teacherEmail}</div></td><td>Based on ${gLabel(a.prevGrade)}</td><td>${status}</td><td>${btn}</td></tr>`;
+  }).join(""):`<tr><td colspan="4" class="muted">No diagnostics${(fSub||fTerm)?" match this filter":" yet. Your teacher will share one with you here"}.</td></tr>`;
   return `<div class="card"><h2>Welcome, ${(me.name||'').split(' ')[0]} 👋</h2><p class="sub">${me.email} · Student dashboard</p></div>
-  <div class="card"><h2>Join a class</h2><p class="sub">Got a class code from your teacher? Enter it to load that class's diagnostic.</p>
+  <div class="card"><h2>Join a class</h2><p class="sub">Got a class code from your teacher? Enter it to load that class's term diagnostics.</p>
     <div class="row"><div class="col"><label>Class code</label><input id="joinCode" placeholder="e.g. K7P2QX" style="text-transform:uppercase;letter-spacing:2px"></div>
     <div class="col" style="display:flex;align-items:flex-end"><button class="btn" onclick="joinClass()">Join class</button></div></div>
     <div id="joinMsg" style="font-size:12px;margin-top:8px"></div>
   </div>
-  <div class="card"><h2>My diagnostics</h2><p class="sub">Tests your teacher has shared with you.</p>
-    <table><thead><tr><th>Subject</th><th>Diagnostic</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="muted" style="font-size:12px;margin-top:10px">After a test, use the tabs above for your results, gap analysis, skill plan and the <b>Practice</b> activities.</p>
-  </div>
-  ${S.result?`<div class="card"><h2>My latest result (this device)</h2>
-    <div class="kpi"><div class="box"><div class="n">${S.result.overallPct}%</div><div class="l">Overall</div></div>
-    <div class="box"><div class="n"><span class="pill ${S.result.level.cls}" style="font-size:12px">${S.result.level.name}</span></div><div class="l">Level</div></div></div></div>`:""}`;
+  <div class="card"><div class="flex-between"><h2 style="margin:0">My diagnostics</h2>
+      <div><label style="display:inline;margin-right:6px">Term</label><select style="width:auto;display:inline-block;margin-right:10px" onchange="setSTerm(this.value)"><option value="" ${!fTerm?"selected":""}>All</option>${[1,2,3].map(t=>`<option value="${t}" ${fTerm===String(t)?"selected":""}>Term ${t}</option>`).join("")}</select>
+      <label style="display:inline;margin-right:6px">Subject</label><select style="width:auto;display:inline-block" onchange="setSSubject(this.value)"><option value="" ${!fSub?"selected":""}>All</option><option value="English" ${fSub==="English"?"selected":""}>English</option><option value="Math" ${fSub==="Math"?"selected":""}>Mathematics</option></select></div></div>
+    <p class="sub">Every term's diagnostic, with its term and publish date. Open any completed one to review that term's results, goals, plan and activities.</p>
+    <table><thead><tr><th>Subject / term</th><th>Diagnostic</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+}
+function setSSubject(v){S.sSubject=v;save();render();}
+function setSTerm(v){S.sTerm=v;save();render();}
+function openCompleted(id){
+  const a=assignments().find(x=>x.id===id); if(!a)return;
+  if(!a.snapshot){ alert("No saved results for this diagnostic yet."); return; }
+  S=Object.assign(freshState(), JSON.parse(JSON.stringify(a.snapshot)));
+  if(!S.taskDone)S.taskDone={};
+  S.activeAssignment=id; S.activeTab="results";
+  save(); render();
 }
 function openAssignment(id,completed){
   const a=assignments().find(x=>x.id===id); if(!a)return;
   if(completed){ showAssignmentResult(id); return; }
   if(a.status==="completed" && !a.retakeAllowed){ alert("You've already completed this diagnostic. Ask your teacher to allow a retake."); return; }
+  if(a.status!=="completed" && !isPublished(a)){ alert("This diagnostic opens on "+fmtDate(a.publishDate)+"."); return; }
   S.activeAssignment=id;
   S.student={name:AUTH.name,subject:a.subject,prevGrade:a.prevGrade,curGrade:a.curGrade};
   S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";S.activeTab="diagnostic";
