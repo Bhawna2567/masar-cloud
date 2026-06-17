@@ -152,11 +152,12 @@ if (typeof QUESTION_BANK === "undefined") { var QUESTION_BANK = {}; }
 /* ---- Firebase Auth + Firestore data layer (cloud) ---- */
 try{ firebase.initializeApp(firebaseConfig); }catch(e){ console.warn("Firebase init:",e); }
 const fbAuth=firebase.auth(), db=firebase.firestore();
-let AUTH=null, CACHE={assignments:[]}, _unsub=[];
+let AUTH=null, CACHE={assignments:[],classes:[]}, _unsub=[];
 let VIEWING=null, READONLY=false;
 function lsGet(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function lsSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
 function assignments(){return CACHE.assignments;}
+function classesList(){return CACHE.classes||[];}
 function freshState(){return {student:null,answers:{},result:null,plan:null,taskDone:{},writeResponse:"",activeTab:"home",authMode:"login"};}
 function stateKey(){return "masar_cloud_state_"+(AUTH?AUTH.uid:"guest");}
 let S=freshState();
@@ -182,6 +183,7 @@ function startListeners(){
   _unsub.forEach(u=>{try{u()}catch(e){}}); _unsub=[];
   if(AUTH.role==="teacher"){
     _unsub.push(db.collection("assignments").where("teacherUid","==",AUTH.uid).onSnapshot(s=>{CACHE.assignments=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
+    _unsub.push(db.collection("classes").where("teacherUid","==",AUTH.uid).onSnapshot(s=>{CACHE.classes=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
     _unsub.push(db.collection("users").doc(AUTH.uid).onSnapshot(d=>{ if(d.exists){ AUTH=Object.assign({},AUTH,d.data(),{uid:AUTH.uid}); render(); } }, e=>console.warn(e)));
   } else {
     _unsub.push(db.collection("assignments").where("studentEmail","==",AUTH.email).onSnapshot(s=>{CACHE.assignments=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
@@ -235,7 +237,7 @@ function render(){
   if(chip){ chip.innerHTML = AUTH?`<span class="pill ${AUTH.role==='teacher'?'amber':'green'}">${AUTH.role==='teacher'?'Teacher':'Student'}</span><span style="color:#fff;font-size:13px;font-weight:600">${(AUTH.name||'').split(' ')[0]}</span><button class="btn ghost sm" onclick="logout()">Log out</button>`:""; }
   const tabsEl=document.getElementById("tabs"); const v=document.getElementById("view");
   if(!AUTH){ tabsEl.innerHTML=""; v.innerHTML=viewAuth(); window.scrollTo(0,0); return; }
-  if(AUTH.role==="teacher" && !VIEWING){ tabsEl.innerHTML=""; v.innerHTML=viewTeacher(); window.scrollTo(0,0); return; }
+  if(AUTH.role==="teacher" && !VIEWING){ tabsEl.innerHTML=""; v.innerHTML=S.openClassId?viewClass(S.openClassId):viewTeacher(); window.scrollTo(0,0); return; }
   renderTabs();
   const map={home:viewHome,setup:viewSetup,diagnostic:viewDiagnostic,results:viewResults,gaps:viewGaps,report:viewReport,goals:viewGoals,plan:viewPlan,folders:viewFolders,tracker:viewTracker,curriculum:viewCurriculum};
   if(!tabEnabled(TABS.find(t=>t.id===S.activeTab))){S.activeTab=VIEWING?"results":"home";}
@@ -299,6 +301,7 @@ function viewTeacher(){
   const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
   const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td></tr>`).join(""):`<tr><td colspan="4" class="muted">Nothing assigned yet.</td></tr>`;
   return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
+  ${classCard()}
   <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
     <table><thead><tr><th>Student</th><th>Diagnostics</th><th>Latest result</th><th>Plan progress</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Add a student</h3>
@@ -372,6 +375,148 @@ function teacherOpenStudent(id){
   render();
 }
 function teacherCloseStudent(){ VIEWING=null; READONLY=false; S=freshState(); render(); }
+
+/* ============================================================
+   CLASSES — a teacher gives one diagnostic to a whole class;
+   Adeptly auto-filters low achievers and builds goals,
+   comparative analysis and activities for each.
+   ============================================================ */
+function genCode(){var c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",s="";for(var i=0;i<6;i++)s+=c.charAt(Math.floor(Math.random()*c.length));return s;}
+function classCompleted(id){return assignments().filter(a=>a.classId===id&&a.status==="completed");}
+function classSkillAvg(id){
+  const c=classesList().find(x=>x.id===id); if(!c)return {};
+  const done=classCompleted(id), areas=skillsFor(c.subject), out={};
+  areas.forEach(k=>{let s=0,n=0;done.forEach(a=>{const v=(a.skillPct||{})[k];if(v!=null){s+=v;n++;}});out[k]=n?Math.round(s/n):null;});
+  return out;
+}
+function flaggedFor(id){
+  const done=classCompleted(id); if(!done.length)return [];
+  const sorted=done.slice().sort((a,b)=>(a.score||0)-(b.score||0));
+  const bottomN=Math.max(1,Math.ceil(done.length*0.3)), bottomIds={};
+  sorted.slice(0,bottomN).forEach(a=>bottomIds[a.id]=true);
+  return done.filter(a=>(a.score||0)<80 || bottomIds[a.id]).map(a=>{
+    const reasons=[];
+    if((a.score||0)<80)reasons.push("Below grade level");
+    if(bottomIds[a.id])reasons.push("Bottom 30% of class");
+    return Object.assign({_reasons:reasons},a);
+  });
+}
+function computeGoalsFor(a){
+  if(a.goals&&a.goals.length)return a.goals;
+  const areas=skillsFor(a.subject), sp=a.skillPct||{};
+  const focus=areas.filter(k=>sp[k]!=null&&sp[k]<80).sort((x,y)=>(sp[x]||0)-(sp[y]||0)).slice(0,4);
+  return focus.map(k=>{const b=sp[k]||0;const t1=Math.min(90,Math.max(b+15,55)),t2=Math.min(95,Math.max(t1+10,65)),t3=Math.min(98,Math.max(t2+10,75));return {skill:k,baseline:b,t1:t1,t2:t2,t3:t3,statement:`Improve ${k} from ${b}% to ${t3}% across the three terms.`};});
+}
+function classCard(){
+  const as=assignments(), cs=classesList();
+  const grades=GRADES.map(g=>`<option value="${g.id}">${g.label}</option>`).join("");
+  const rows=cs.length?cs.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(c=>{
+    const ca=as.filter(a=>a.classId===c.id), done=ca.filter(a=>a.status==="completed");
+    const avg=done.length?Math.round(done.reduce((s,a)=>s+(a.score||0),0)/done.length):null;
+    const flagged=flaggedFor(c.id).length;
+    return `<tr><td><b>${c.name}</b><div class="muted" style="font-size:11px">Join code <b style="letter-spacing:1px">${c.joinCode}</b></div></td><td>${subjChip(c.subject)}</td><td>${gLabel(c.prevGrade)} → ${gLabel(c.curGrade)}</td><td>${ca.length} students · ${done.length} done</td><td>${avg!=null?avg+"%":"—"}</td><td>${flagged?`<span class="pill red">${flagged} flagged</span>`:(done.length?`<span class="pill green">All on track</span>`:`<span class="muted">—</span>`)}</td><td><button class="btn sm" onclick="openClass('${c.id}')">Open class →</button></td></tr>`;
+  }).join(""):`<tr><td colspan="7" class="muted">No classes yet. Create one to give a whole class the same diagnostic.</td></tr>`;
+  return `<div class="card"><h2>My classes</h2><p class="sub">Create a class, share its join code (or add students), and the whole class takes one diagnostic. Adeptly automatically flags who needs skill development.</p>
+    <table><thead><tr><th>Class</th><th>Subject</th><th>Grades</th><th>Enrolment</th><th>Avg</th><th>Flagged</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <h3 style="font-size:14px;margin:18px 0 6px">Create a class</h3>
+    <div class="row"><div class="col"><label>Class name</label><input id="c_name" placeholder="e.g. Grade 7B — English"></div>
+      <div class="col"><label>Subject</label><select id="c_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div></div>
+    <div class="row" style="margin-top:10px"><div class="col"><label>Diagnostic grade (previous)</label><select id="c_prev">${grades}</select></div>
+      <div class="col"><label>Current grade</label><select id="c_cur">${grades}</select></div></div>
+    <div style="margin-top:12px"><button class="btn" onclick="createClass()">+ Create class</button> <span id="cmsg" style="font-size:12px;color:var(--ok)"></span></div>
+  </div>`;
+}
+function createClass(){
+  const name=document.getElementById("c_name").value.trim();
+  const subject=document.getElementById("c_subject").value, prev=document.getElementById("c_prev").value, cur=document.getElementById("c_cur").value;
+  const msg=document.getElementById("cmsg");
+  if(!name){msg.style.color="var(--red)";msg.textContent="Enter a class name.";return;}
+  msg.style.color="var(--muted)";msg.textContent="Creating…";
+  db.collection("classes").add({teacherUid:AUTH.uid,teacherName:AUTH.name,name:name,subject:subject,prevGrade:prev,curGrade:cur,joinCode:genCode(),createdAt:Date.now()})
+    .then(()=>{const m=document.getElementById("cmsg");if(m){m.style.color="var(--ok)";m.textContent="Class created — share its join code.";}})
+    .catch(e=>{const m=document.getElementById("cmsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
+}
+function openClass(id){S.openClassId=id;render();}
+function closeClass(){S.openClassId=null;render();}
+function addToClass(id){
+  const c=classesList().find(x=>x.id===id); if(!c)return;
+  const name=document.getElementById("cs_name").value.trim(), email=document.getElementById("cs_email").value.trim().toLowerCase();
+  const msg=document.getElementById("csmsg");
+  if(!name||!email){msg.style.color="var(--red)";msg.textContent="Enter name and email.";return;}
+  if(assignments().find(a=>a.classId===id&&a.studentEmail===email)){msg.style.color="var(--red)";msg.textContent="That student is already in this class.";return;}
+  msg.style.color="var(--muted)";msg.textContent="Adding…";
+  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,status:"pending",createdAt:Date.now()})
+    .then(()=>db.collection("users").doc(AUTH.uid).update({students:firebase.firestore.FieldValue.arrayUnion({name:name,email:email})}).catch(()=>{}))
+    .then(()=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--ok)";m.textContent="Added — the test is on their dashboard.";}})
+    .catch(e=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
+}
+function joinClass(){
+  const code=(document.getElementById("joinCode").value||"").trim().toUpperCase();
+  const msg=document.getElementById("joinMsg");
+  if(!code){msg.style.color="var(--red)";msg.textContent="Enter a class code.";return;}
+  msg.style.color="var(--muted)";msg.textContent="Looking up class…";
+  db.collection("classes").where("joinCode","==",code).limit(1).get().then(qs=>{
+    const m=document.getElementById("joinMsg");
+    if(qs.empty){if(m){m.style.color="var(--red)";m.textContent="No class found with that code.";}return;}
+    const d=qs.docs[0], c=Object.assign({id:d.id},d.data());
+    if(assignments().find(a=>a.classId===c.id)){if(m){m.style.color="var(--red)";m.textContent="You're already in "+c.name+".";}return;}
+    return db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,status:"pending",createdAt:Date.now()})
+      .then(()=>{const m2=document.getElementById("joinMsg");if(m2){m2.style.color="var(--ok)";m2.textContent="Joined "+c.name+"! Your test is in the list below.";}});
+  }).catch(e=>{const m=document.getElementById("joinMsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
+}
+function viewClass(id){
+  const c=classesList().find(x=>x.id===id);
+  if(!c){S.openClassId=null;return viewTeacher();}
+  const ca=assignments().filter(a=>a.classId===id);
+  const done=ca.filter(a=>a.status==="completed");
+  const areas=skillsFor(c.subject);
+  const avg=done.length?Math.round(done.reduce((s,a)=>s+(a.score||0),0)/done.length):null;
+  const skAvg=classSkillAvg(id);
+  const flagged=flaggedFor(id);
+  const flaggedIds={}; flagged.forEach(a=>flaggedIds[a.id]=true);
+  const rosterRows=ca.length?ca.slice().sort((a,b)=>(b.score||0)-(a.score||0)).map(a=>{
+    const st=a.status==="completed"?`<span class="pill ${a.levelCls||rag(a.score||0)}">${a.score}% · ${a.level||""}</span>`:`<span class="pill amber">Pending</span>`;
+    const flag=flaggedIds[a.id]?`<span class="pill red">Needs support</span>`:(a.status==="completed"?`<span class="pill green">On track</span>`:`<span class="muted">—</span>`);
+    const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button>`:"";
+    return `<tr><td><b>${a.studentName||a.studentEmail}</b><div class="muted" style="font-size:11px">${a.studentEmail}</div></td><td>${st}</td><td>${flag}</td><td>${btn}</td></tr>`;
+  }).join(""):`<tr><td colspan="4" class="muted">No students yet. Share the join code or add students below.</td></tr>`;
+  const benchmark=80;
+  const detail=flagged.length?flagged.slice().sort((a,b)=>(a.score||0)-(b.score||0)).map(a=>{
+    const sp=a.skillPct||{};
+    const compRows=areas.map(k=>{
+      const sv=sp[k], cav=skAvg[k], gap=(sv!=null&&cav!=null)?sv-cav:null;
+      return `<tr><td>${k}</td><td>${sv!=null?sv+"%":"—"}</td><td>${cav!=null?cav+"%":"—"}</td><td>${benchmark}%</td><td>${sv!=null?`<span class="pill ${rag(sv)}">${sv>=80?"On track":sv>=55?"Developing":"Gap"}</span>`:""}</td><td>${gap!=null?`<span style="color:${gap>=0?'var(--ok)':'var(--red)'};font-weight:700">${gap>=0?'+':''}${gap}</span>`:"—"}</td></tr>`;
+    }).join("");
+    const goals=computeGoalsFor(a);
+    const goalRows=goals.length?goals.map(g=>`<div style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:7px;font-size:13px"><b>${g.skill}</b> — ${g.statement} <span class="muted">(targets ${g.t1}% → ${g.t2}% → ${g.t3}%)</span></div>`).join(""):`<p class="muted" style="font-size:12px">No gap skills — flagged on class ranking only.</p>`;
+    const focusSkills=goals.map(g=>g.skill);
+    const act=focusSkills.length?`<p style="font-size:13px;margin:10px 0 6px"><b>Targeted activities</b> for: ${focusSkills.map(s=>`<span class="tag">${s}</span>`).join(" ")}</p><p class="muted" style="font-size:12px;margin:0">Weekly practice exercises and games for these skills are generated in the student's plan. ${a.snapshot?`<a href="#" onclick="teacherOpenStudent('${a.id}');return false">Open their full plan &amp; activities →</a>`:"They appear once the student opens their Skill Development Plan."}</p>`:"";
+    return `<div class="card" style="border-left:4px solid var(--red)">
+      <div class="flex-between"><h3 style="margin:0;font-size:16px">${a.studentName||a.studentEmail}</h3><div>${a._reasons.map(r=>`<span class="pill red" style="margin-left:4px">${r}</span>`).join("")}</div></div>
+      <p class="sub" style="margin:6px 0 12px">Overall ${a.score}% · diagnostic measured ${gLabel(c.prevGrade)} mastery · ${gLabel(c.curGrade)} expects ≥80% across skills</p>
+      <b style="font-size:13px">Comparative analysis</b>
+      <table style="margin:6px 0 4px"><thead><tr><th>Skill</th><th>Student</th><th>Class avg</th><th>Benchmark</th><th>Status</th><th>vs class</th></tr></thead><tbody>${compRows}</tbody></table>
+      <div style="margin:10px 0 12px"><b style="font-size:13px">🎯 Goals</b><div style="margin-top:6px">${goalRows}</div></div>
+      ${act}
+    </div>`;
+  }).join(""):(done.length?`<div class="card"><p class="muted" style="margin:0">No students currently flagged — the whole class is at or above grade level. 🎉</p></div>`:`<div class="card"><p class="muted" style="margin:0">No completed tests yet. As students take the diagnostic, those needing skill development appear here automatically.</p></div>`);
+  return `<div class="card"><div class="flex-between"><h2 style="margin:0">${c.name}</h2><button class="btn ghost sm" onclick="closeClass()">← All classes</button></div>
+    <p class="sub">${subjChip(c.subject)} · ${gLabel(c.prevGrade)} → ${gLabel(c.curGrade)}</p>
+    <div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#eef2ff;border-color:#d6dbff;color:var(--ink)">Join code: <b style="font-size:18px;letter-spacing:2px">${c.joinCode}</b> <span class="muted" style="font-size:12px">— students enter this under “Join a class” on their dashboard</span></div>
+    <div class="kpi"><div class="box"><div class="n">${ca.length}</div><div class="l">Enrolled</div></div><div class="box"><div class="n">${done.length}</div><div class="l">Completed</div></div><div class="box"><div class="n">${avg!=null?avg+"%":"—"}</div><div class="l">Class average</div></div><div class="box"><div class="n" style="color:var(--red)">${flagged.length}</div><div class="l">Need support</div></div></div>
+  </div>
+  <div class="card"><h2>Class roster</h2><p class="sub">Same diagnostic for everyone, ranked by score. Results update live as students finish.</p>
+    <table><thead><tr><th>Student</th><th>Result</th><th>Status</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
+    <h3 style="font-size:14px;margin:18px 0 6px">Add a student to this class</h3>
+    <div class="row"><div class="col"><label>Name</label><input id="cs_name" placeholder="Student name"></div><div class="col"><label>School email</label><input id="cs_email" type="email" placeholder="student@school.ae"></div></div>
+    <div style="margin-top:10px"><button class="btn" onclick="addToClass('${c.id}')">+ Add to class</button> <span id="csmsg" style="font-size:12px;color:var(--ok)"></span></div>
+  </div>
+  ${done.length?`<div class="card"><h2>Class skill averages</h2><p class="sub">Average mastery per ${c.subject==="Math"?"strand":"skill"} across ${done.length} completed test(s).</p>
+    ${areas.map(k=>{const v=skAvg[k];return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px"><span style="width:140px;font-size:13px;color:var(--muted)">${k}</span><div class="bar" style="flex:1"><span style="width:${v||0}%;background:${v!=null&&v<55?'var(--red)':v!=null&&v<80?'var(--amber)':'var(--ok)'}"></span></div><span style="width:42px;text-align:right;font-size:13px;font-weight:700">${v!=null?v+"%":"—"}</span></div>`;}).join("")}
+  </div>`:""}
+  <div class="card"><h2>Students needing skill development</h2><p class="sub">Auto-filtered: below grade level (under 80%) <b>or</b> in the bottom 30% of the class. Each card has a comparative analysis, measurable goals, and targeted activities.</p></div>
+  ${detail}`;
+}
 function viewHome(){
   const me=AUTH, my=assignments();
   const rows=my.length?my.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>{
@@ -380,6 +525,11 @@ function viewHome(){
     return `<tr><td>${subjChip(a.subject)}<div class="muted" style="font-size:11px;margin-top:4px">shared by ${a.teacherName||a.teacherEmail}</div></td><td>Based on ${gLabel(a.prevGrade)}</td><td>${status}</td><td>${btn}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No tests assigned yet. Your teacher will share a diagnostic with you here.</td></tr>`;
   return `<div class="card"><h2>Welcome, ${(me.name||'').split(' ')[0]} 👋</h2><p class="sub">${me.email} · Student dashboard</p></div>
+  <div class="card"><h2>Join a class</h2><p class="sub">Got a class code from your teacher? Enter it to load that class's diagnostic.</p>
+    <div class="row"><div class="col"><label>Class code</label><input id="joinCode" placeholder="e.g. K7P2QX" style="text-transform:uppercase;letter-spacing:2px"></div>
+    <div class="col" style="display:flex;align-items:flex-end"><button class="btn" onclick="joinClass()">Join class</button></div></div>
+    <div id="joinMsg" style="font-size:12px;margin-top:8px"></div>
+  </div>
   <div class="card"><h2>My diagnostics</h2><p class="sub">Tests your teacher has shared with you.</p>
     <table><thead><tr><th>Subject</th><th>Diagnostic</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     <p class="muted" style="font-size:12px;margin-top:10px">After a test, use the tabs above for your results, gap analysis, skill plan and the <b>Practice</b> activities.</p>
