@@ -150,6 +150,7 @@ if (typeof QUESTION_BANK === "undefined") { var QUESTION_BANK = {}; }
 try{ firebase.initializeApp(firebaseConfig); }catch(e){ console.warn("Firebase init:",e); }
 const fbAuth=firebase.auth(), db=firebase.firestore();
 let AUTH=null, CACHE={assignments:[]}, _unsub=[];
+let VIEWING=null, READONLY=false;
 function lsGet(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function lsSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
 function assignments(){return CACHE.assignments;}
@@ -157,9 +158,9 @@ function freshState(){return {student:null,answers:{},result:null,plan:null,task
 function stateKey(){return "masar_cloud_state_"+(AUTH?AUTH.uid:"guest");}
 let S=freshState();
 function load(){return lsGet(stateKey(),null);}
-function save(){ if(AUTH&&AUTH.role==="student"){ lsSet(stateKey(),S); syncResultToAssignment(); } }
+function save(){ if(READONLY) return; if(AUTH&&AUTH.role==="student"){ lsSet(stateKey(),S); syncResultToAssignment(); } }
 function loadStateForUser(){S=load()||freshState();}
-function reset(){ if(confirm("Clear this student's progress on this device and start over?")){ localStorage.removeItem(stateKey()); S=freshState(); render(); } }
+function reset(){ if(READONLY) return; if(confirm("Clear this student's progress on this device and start over?")){ localStorage.removeItem(stateKey()); S=freshState(); render(); } }
 function syncResultToAssignment(){
   if(!(AUTH&&AUTH.role==="student")||!S.result||!S.activeAssignment) return;
   const r=S.result;
@@ -169,7 +170,9 @@ function syncResultToAssignment(){
     ["1","2","3"].forEach(t=>{let d=0,tt=0; S.plan.terms[t].weeks.forEach(w=>w.tasks.forEach((_,i)=>{tt++; if(S.taskDone[t+"-"+w.week+"-"+i])d++;})); tp[t]=tt?Math.round(d/tt*100):0; totalDone+=d; totalAll+=tt;});
     const focus=(S.plan.focus||[]).map(f=>{let d=0,tt=0; ["1","2","3"].forEach(t=>S.plan.terms[t].weeks.forEach(w=>{if(w.skill===f)w.tasks.forEach((_,i)=>{tt++; if(S.taskDone[t+"-"+w.week+"-"+i])d++;});})); return {skill:f,baseline:(S.result.skillPct[f]||0),planPct:tt?Math.round(d/tt*100):0};});
     payload.progress={yearPct:totalAll?Math.round(totalDone/totalAll*100):0,t1:tp["1"],t2:tp["2"],t3:tp["3"],totalDone:totalDone,totalAll:totalAll,focus:focus,updatedAt:Date.now()};
+    payload.goals=S.plan.goals||[];
   }
+  payload.snapshot={result:S.result,plan:S.plan,taskDone:S.taskDone||{},student:S.student};
   db.collection("assignments").doc(S.activeAssignment).set(payload,{merge:true}).catch(e=>console.warn("sync:",e));
 }
 function startListeners(){
@@ -202,6 +205,7 @@ const TABS=[
   {id:"results",label:"3 · Level & Results",need:"result"},
   {id:"gaps",label:"4 · Gap Analysis",need:"result"},
   {id:"report",label:"5 · Parent/Teacher Report",need:"result"},
+  {id:"goals",label:"🎯 My Goals",need:"result"},
   {id:"plan",label:"6 · Skill Development Plan",need:"result"},
   {id:"folders",label:"7 · Weekly Folders",need:"plan"},
   {id:"tracker",label:"8 · Progress Tracker",need:"plan"},
@@ -210,14 +214,16 @@ const TABS=[
 function tabEnabled(t){ if(t.always)return true; if(t.need==="student")return !!S.student; if(t.need==="result")return !!S.result; if(t.need==="plan")return !!S.plan; return true; }
 function renderTabs(){
   const el=document.getElementById("tabs"); el.innerHTML="";
+  const hideTabs=VIEWING?["home","setup","diagnostic"]:[];
   TABS.forEach(t=>{
+    if(hideTabs.indexOf(t.id)>=0) return;
     const b=document.createElement("button");
     b.textContent=t.label; b.disabled=!tabEnabled(t);
     if(S.activeTab===t.id)b.classList.add("active");
     b.onclick=()=>{S.activeTab=t.id;save();render();};
     el.appendChild(b);
   });
-  const rb=document.createElement("button");rb.textContent="↺ Reset";rb.className="no-print";rb.onclick=reset;rb.style.marginLeft="auto";el.appendChild(rb);
+  const rb=document.createElement("button");rb.className="no-print";rb.style.marginLeft="auto";if(VIEWING){rb.textContent="← Back";rb.onclick=teacherCloseStudent;}else{rb.textContent="↺ Reset";rb.onclick=reset;}el.appendChild(rb);
 }
 
 function render(){
@@ -225,11 +231,13 @@ function render(){
   if(chip){ chip.innerHTML = AUTH?`<span class="pill ${AUTH.role==='teacher'?'amber':'green'}">${AUTH.role==='teacher'?'Teacher':'Student'}</span><span style="color:#fff;font-size:13px;font-weight:600">${(AUTH.name||'').split(' ')[0]}</span><button class="btn ghost sm" onclick="logout()">Log out</button>`:""; }
   const tabsEl=document.getElementById("tabs"); const v=document.getElementById("view");
   if(!AUTH){ tabsEl.innerHTML=""; v.innerHTML=viewAuth(); window.scrollTo(0,0); return; }
-  if(AUTH.role==="teacher"){ tabsEl.innerHTML=""; v.innerHTML=viewTeacher(); window.scrollTo(0,0); return; }
+  if(AUTH.role==="teacher" && !VIEWING){ tabsEl.innerHTML=""; v.innerHTML=viewTeacher(); window.scrollTo(0,0); return; }
   renderTabs();
-  const map={home:viewHome,setup:viewSetup,diagnostic:viewDiagnostic,results:viewResults,gaps:viewGaps,report:viewReport,plan:viewPlan,folders:viewFolders,tracker:viewTracker,curriculum:viewCurriculum};
-  if(!tabEnabled(TABS.find(t=>t.id===S.activeTab))){S.activeTab="home";}
-  v.innerHTML=(map[S.activeTab]||viewHome)();
+  const map={home:viewHome,setup:viewSetup,diagnostic:viewDiagnostic,results:viewResults,gaps:viewGaps,report:viewReport,goals:viewGoals,plan:viewPlan,folders:viewFolders,tracker:viewTracker,curriculum:viewCurriculum};
+  if(!tabEnabled(TABS.find(t=>t.id===S.activeTab))){S.activeTab=VIEWING?"results":"home";}
+  let inner=(map[S.activeTab]||viewHome)();
+  if(VIEWING) inner=`<div class="notice" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">👁 Viewing <b>${VIEWING.studentName}</b>'s dashboard (read-only) <button class="btn ghost sm" onclick="teacherCloseStudent()">← Back to my dashboard</button></div>`+inner;
+  v.innerHTML=inner;
   window.scrollTo(0,0);
 }
 
@@ -282,7 +290,7 @@ function viewTeacher(){
       <td>${sa.length} assigned · ${done.length} done</td>
       <td>${last?`${last.score}% · ${last.level||""}`:"—"}</td>
       <td>${(last&&last.progress)?`${last.progress.yearPct}% <span class="muted" style="font-size:10px">(${last.progress.totalDone}/${last.progress.totalAll})</span>`:"—"}</td>
-      <td>${last?`<button class="btn ghost sm" onclick="showAssignmentResult('${last.id}')">Result</button>${last.progress?` <button class="btn ghost sm" onclick="showAssignmentProgress('${last.id}')">Progress</button>`:""}`:""}</td></tr>`;
+      <td>${last?`<button class="btn sm" onclick="teacherOpenStudent('${last.id}')">Open dashboard →</button>`:""}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students yet — add one below.</td></tr>`;
   const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
   const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${a.subject}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td></tr>`).join(""):`<tr><td colspan="4" class="muted">Nothing assigned yet.</td></tr>`;
@@ -343,11 +351,23 @@ function showAssignmentProgress(id){
     <div class="flex-between"><h2 style="margin:0">${a.studentName} — plan progress</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div>
     <p class="sub">${a.subject} · skill development plan${p.updatedAt?` · updated ${new Date(p.updatedAt).toLocaleDateString()}`:""}</p>
     <div class="kpi"><div class="box"><div class="n">${p.yearPct}%</div><div class="l">Year completion</div></div><div class="box"><div class="n">${p.totalDone}/${p.totalAll}</div><div class="l">Tasks done</div></div></div>
+    ${(a.goals&&a.goals.length)?`<h3 style="font-size:14px;margin:14px 0 6px">🎯 Goals</h3>${a.goals.map(g=>`<div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px"><b>${g.skill}</b> — ${g.statement}</div>`).join("")}`:""}
     <div style="margin-top:14px"><b style="font-size:14px">Completion by term</b>${chart}</div>
     <h3 style="font-size:14px;margin:16px 0 6px">Improvement by focus skill</h3>
     <table><thead><tr><th>Skill</th><th>Baseline</th><th>Plan progress</th><th>%</th><th>Trend</th></tr></thead><tbody>${focusRows}</tbody></table>
   </div></div>`; m.style.display="block";
 }
+function teacherOpenStudent(id){
+  const a=assignments().find(x=>x.id===id);
+  if(!a||!a.snapshot){ alert("This student hasn't completed a diagnostic yet, so there is no dashboard to open."); return; }
+  VIEWING={assignmentId:id, studentName:a.studentName};
+  READONLY=true;
+  S=JSON.parse(JSON.stringify(a.snapshot));
+  if(!S.taskDone) S.taskDone={};
+  S.activeTab="results";
+  render();
+}
+function teacherCloseStudent(){ VIEWING=null; READONLY=false; S=freshState(); render(); }
 function viewHome(){
   const me=AUTH, my=assignments();
   const rows=my.length?my.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>{
@@ -472,6 +492,7 @@ function writingScore(text){
   return Math.max(0,Math.min(100,Math.round(score)));
 }
 function grade(){
+  if(READONLY) return;
   const qs=getQuestions();
   const subj=S.student.subject, areas=skillsFor(subj);
   const per={}; areas.forEach(a=>per[a]={correct:0,total:0});
@@ -618,9 +639,32 @@ function generatePlan(){
     }
     terms[t]={ goal:`By end of Term ${t}: raise ${focus.join(", ")} toward grade-level mastery (target ${60+ti*10}%+).`, weeks };
   });
-  return {focus,termWeeks:WEEKS,terms,createdFrom:S.result.when};
+  const goals=focus.map(a=>{
+    const b=S.result.skillPct[a]||0;
+    const t1=Math.min(90,Math.max(b+15,55)), t2=Math.min(95,Math.max(t1+10,65)), t3=Math.min(98,Math.max(t2+10,75));
+    return {skill:a, baseline:b, t1:t1, t2:t2, t3:t3,
+      statement:`Improve ${a} from ${b}% to ${t3}% (grade-level) by year-end — term targets ${t1}% → ${t2}% → ${t3}%.`};
+  });
+  return {focus,termWeeks:WEEKS,terms,goals,createdFrom:S.result.when};
 }
 
+function viewGoals(){
+  const goals=(S.plan&&S.plan.goals)||[];
+  if(!goals.length) return `<div class="card"><h2>My Goals</h2><div class="empty"><div class="big">🎯</div>No gap areas were flagged in your diagnostic — keep up the great work! Goals appear here automatically when there are skills to lift.</div></div>`;
+  function skillPlanPct(sk){let d=0,tt=0;["1","2","3"].forEach(t=>S.plan.terms[t].weeks.forEach(w=>{if(w.skill===sk)w.tasks.forEach((_,i)=>{tt++;if(S.taskDone[t+"-"+w.week+"-"+i])d++;});}));return tt?Math.round(d/tt*100):0;}
+  const cards=goals.map(g=>{
+    const eff=skillPlanPct(g.skill);
+    return `<div class="card"><div class="flex-between"><h2>🎯 ${g.skill}</h2><span class="pill ${eff>=60?'green':eff>0?'amber':'grey'}">${eff}% of activities done</span></div>
+      <p style="font-size:14px;margin:0 0 12px">${g.statement}</p>
+      <div class="kpi"><div class="box"><div class="n">${g.baseline}%</div><div class="l">Start now</div></div>
+        <div class="box"><div class="n">${g.t1}%</div><div class="l">Term 1 target</div></div>
+        <div class="box"><div class="n">${g.t2}%</div><div class="l">Term 2 target</div></div>
+        <div class="box"><div class="n">${g.t3}%</div><div class="l">Year target</div></div></div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Your activities to reach this goal are in <b>Weekly Folders</b> — open the ${g.skill} weeks and tap <b>▶ Practice</b>.</p>
+    </div>`;
+  }).join("");
+  return `<div class="card"><h2>My Goals</h2><p class="sub">Set automatically from your diagnostic. Reach each target by completing the matching activities in your weekly plan.</p></div>${cards}`;
+}
 function viewPlan(){
   const p=S.plan, subj=S.student.subject;
   let terms=["1","2","3"].map(t=>{
@@ -664,6 +708,7 @@ function viewFolders(){
   return html;
 }
 function toggleTask(key,folderId){
+  if(READONLY) return;
   S.taskDone[key]=!S.taskDone[key];save();
   const open=document.querySelectorAll(".folder.open");const openIds=[...open].map(o=>o.id);
   render();
@@ -822,7 +867,7 @@ function buildExercise(skill){
   return {type:"mathinput",items:genMath(skill)};
 }
 let EX=null;
-function launchExercise(key,skill){ EX={key,skill,def:buildExercise(skill),resp:{},submitted:false}; renderExercise(); }
+function launchExercise(key,skill){ if(READONLY) return; EX={key,skill,def:buildExercise(skill),resp:{},submitted:false}; renderExercise(); }
 function exPick(i,oi){ if(EX.submitted)return; EX.resp[i]=oi; renderExercise(); }
 function exInput(i,v){ EX.resp[i]=v; }
 function exWrite(v){ EX.resp.text=v; }
