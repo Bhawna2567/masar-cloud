@@ -627,6 +627,10 @@ function getQuestions(){
   return (QUESTION_BANK[g]&&QUESTION_BANK[g][subj])?QUESTION_BANK[g][subj]:null;
 }
 function viewDiagnostic(){
+  if(S.result){return `<div class="card"><h2>Diagnostic submitted ✓</h2>
+    <div class="empty"><div class="big">✅</div>
+    You've already completed this diagnostic. Your results are in <b>3 · Level &amp; Results</b>.<br>
+    The test can't be retaken unless your teacher unlocks it.</div></div>`;}
   const qs=getQuestions();
   if(!qs){return `<div class="card"><h2>Diagnostic Test</h2>
     <div class="empty"><div class="big">📝</div>
@@ -680,6 +684,7 @@ function writingScore(text){
 }
 function grade(){
   if(READONLY) return;
+  if(S.result){ S.activeTab="results"; save(); render(); return; }
   const qs=getQuestions();
   const subj=S.student.subject, areas=skillsFor(subj);
   const per={}; areas.forEach(a=>per[a]={correct:0,total:0});
