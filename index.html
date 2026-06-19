@@ -384,6 +384,55 @@ function teacherOpenStudent(id){
 }
 function teacherCloseStudent(){ VIEWING=null; READONLY=false; S=freshState(); render(); }
 
+/* ============================================================
+   LOCKDOWN / ANTI-CHEAT
+   - Real lockdown comes from the ClassCurio app hosting Adeptly
+     in its webview. Adeptly looks for a window.ClassCurio bridge
+     and calls it to start/stop the OS-level lockdown.
+   - Soft in-browser measures run regardless (fullscreen, block
+     copy/paste/right-click, and flag tab-switching to the teacher).
+   ============================================================ */
+var LOCK={active:false, leaves:0, handlers:null};
+function ccBridge(){ return (typeof window!=="undefined" && window.ClassCurio) ? window.ClassCurio : null; }
+function inClassCurio(){ return !!ccBridge() || /ClassCurio/i.test((typeof navigator!=="undefined"&&navigator.userAgent)||""); }
+function ccCall(names){ const b=ccBridge(); if(!b)return false; for(var i=0;i<names.length;i++){ var n=names[i]; if(typeof b[n]==="function"){ try{ b[n](); return true; }catch(e){} } } return false; }
+function lockdownStart(){
+  if(LOCK.active) return;
+  if(!(AUTH&&AUTH.role==="student")||READONLY) return;
+  LOCK.active=true; LOCK.leaves=0;
+  ccCall(["startLockdown","start","lock","enterLockdown","enable"]);
+  try{ var el=document.documentElement; if(el.requestFullscreen) el.requestFullscreen().catch(function(){}); }catch(e){}
+  var block=function(e){ e.preventDefault(); return false; };
+  var onLeave=function(){ if(document.hidden){ LOCK.leaves++; flagLeave(); } };
+  var onBlur=function(){ LOCK.leaves++; flagLeave(); };
+  document.addEventListener("contextmenu",block);
+  document.addEventListener("copy",block); document.addEventListener("cut",block); document.addEventListener("paste",block);
+  document.addEventListener("visibilitychange",onLeave);
+  window.addEventListener("blur",onBlur);
+  LOCK.handlers={block:block,onLeave:onLeave,onBlur:onBlur};
+  renderLockBadge();
+}
+function lockdownEnd(){
+  if(!LOCK.active) return;
+  ccCall(["stopLockdown","stop","unlock","exitLockdown","disable"]);
+  var h=LOCK.handlers;
+  if(h){ document.removeEventListener("contextmenu",h.block); document.removeEventListener("copy",h.block); document.removeEventListener("cut",h.block); document.removeEventListener("paste",h.block); document.removeEventListener("visibilitychange",h.onLeave); window.removeEventListener("blur",h.onBlur); }
+  try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function(){}); }catch(e){}
+  LOCK.active=false; LOCK.handlers=null; removeLockBadge();
+}
+function flagLeave(){
+  if(AUTH&&AUTH.role==="student"&&S.activeAssignment){ db.collection("assignments").doc(S.activeAssignment).update({leaveCount:LOCK.leaves,lastLeftAt:Date.now()}).catch(function(){}); }
+  var b=document.getElementById("lockBadge"); if(b){ var c=b.querySelector(".lk-leaves"); if(c)c.textContent=LOCK.leaves; }
+}
+function renderLockBadge(){
+  removeLockBadge();
+  var d=document.createElement("div"); d.id="lockBadge";
+  d.style.cssText="position:fixed;top:0;left:0;right:0;z-index:200;background:#0f172a;color:#fff;font-size:12px;text-align:center;padding:6px 10px;letter-spacing:.3px";
+  d.innerHTML="🔒 Secure assessment mode"+(inClassCurio()?" — ClassCurio lockdown active":" — stay on this screen; leaving is recorded")+" · screen exits: <b class=\"lk-leaves\">0</b>";
+  document.body.appendChild(d);
+}
+function removeLockBadge(){ var b=document.getElementById("lockBadge"); if(b&&b.parentNode)b.parentNode.removeChild(b); }
+
 /* ===== PROGRESS GRAPHS (per subject: year-by-term + term-by-skill) ===== */
 function subjectsForStudent(email){ const set={}; assignments().filter(a=>a.studentEmail===email).forEach(a=>{set[a.subject]=1;}); return Object.keys(set); }
 function termAssignmentFor(email,subject,term){
@@ -678,7 +727,7 @@ function viewClass(id){
     const st=a.status==="completed"?`<span class="pill ${a.levelCls||rag(a.score||0)}">${a.score}% · ${a.level||""}</span>`:(isPublished(a)?`<span class="pill amber">Pending</span>`:`<span class="pill grey">Opens ${fmtDate(a.publishDate)}</span>`);
     const flag=flaggedIds[a.id]?`<span class="pill red">Needs support</span>`:(a.status==="completed"?`<span class="pill green">On track</span>`:`<span class="muted">—</span>`);
     const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button> <button class="btn ghost sm" onclick="sendReportMenu('${a.id}')">📲 Parent</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake ✓":"Allow retake"}</button>`:"";
-    return `<tr><td><b>${a.studentName||a.studentEmail}</b><div class="muted" style="font-size:11px">${a.studentEmail}</div></td><td>${st}</td><td>${flag}</td><td>${btn}</td></tr>`;
+    return `<tr><td><b>${a.studentName||a.studentEmail}</b><div class="muted" style="font-size:11px">${a.studentEmail}</div>${a.leaveCount?`<div style="font-size:10px;color:var(--red);font-weight:700">⚠ left screen ${a.leaveCount}× during assessment</div>`:""}</td><td>${st}</td><td>${flag}</td><td>${btn}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students enrolled for Term ${term} yet.</td></tr>`;
   const benchmark=80;
   const detail=flagged.length?flagged.slice().sort((a,b)=>(a.score||0)-(b.score||0)).map(a=>{
@@ -790,7 +839,7 @@ function openAssignment(id,completed){
   S.student={name:AUTH.name,subject:a.subject,prevGrade:a.prevGrade,curGrade:a.curGrade};
   S.prior=a.prior||null; S.curTerm=a.term||"1";
   S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";S.activeTab="diagnostic";
-  save(); render();
+  save(); render(); lockdownStart();
 }
 
 function viewSetup(){
@@ -913,6 +962,7 @@ function grade(){
   S.result.writeResponse=S.writeResponse||"";
   S.result.writingProvisional=writingProvisional;
   S.plan=generatePlan();
+  lockdownEnd();
   S.activeTab="results"; save(); render();
 }
 
@@ -1274,7 +1324,7 @@ function buildExercise(skill){
   return {type:"mathinput",items:genMath(skill)};
 }
 let EX=null;
-function launchExercise(key,skill){ if(READONLY) return; EX={key,skill,def:buildExercise(skill),resp:{},submitted:false}; renderExercise(); }
+function launchExercise(key,skill){ if(READONLY) return; EX={key,skill,def:buildExercise(skill),resp:{},submitted:false}; renderExercise(); lockdownStart(); }
 function exPick(i,oi){ if(EX.submitted)return; EX.resp[i]=oi; renderExercise(); }
 function exInput(i,v){ EX.resp[i]=v; }
 function exWrite(v){ EX.resp.text=v; }
@@ -1286,7 +1336,7 @@ function submitExercise(){
   EX.submitted=true; renderExercise();
 }
 function finishExercise(){ if(EX){ S.taskDone[EX.key]=true; save(); } closeExercise(); render(); }
-function closeExercise(){ EX=null; const m=document.getElementById("exModal"); if(m){ m.style.display="none"; m.innerHTML=""; } }
+function closeExercise(){ lockdownEnd(); EX=null; const m=document.getElementById("exModal"); if(m){ m.style.display="none"; m.innerHTML=""; } }
 function renderExercise(){
   const m=document.getElementById("exModal"); const d=EX.def; let body="";
   if(d.type==="writing"){
