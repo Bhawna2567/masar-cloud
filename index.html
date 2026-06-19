@@ -300,7 +300,7 @@ function viewTeacher(){
       <td>${last?`<button class="btn sm" onclick="teacherOpenStudent('${last.id}')">Open →</button> `:""}<button class="btn ghost sm" onclick="removeStudent('${s.email}')">Remove</button></td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students yet — add one below.</td></tr>`;
   const studentOpts=roster.map(s=>`<option value="${s.email}">${s.name} (${s.email})</option>`).join("");
-  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td><td>${a.status==="completed"?`<button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake allowed ✓":"Allow retake"}</button> `:""}<button class="btn ghost sm" onclick="deleteAssignment('${a.id}')">Delete</button></td></tr>`).join(""):`<tr><td colspan="5" class="muted">Nothing assigned yet.</td></tr>`;
+  const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td><td>${a.status==="completed"?`<button class="btn ghost sm" onclick="sendReportMenu('${a.id}')">📲 Parent</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake allowed ✓":"Allow retake"}</button> `:""}<button class="btn ghost sm" onclick="deleteAssignment('${a.id}')">Delete</button></td></tr>`).join(""):`<tr><td colspan="5" class="muted">Nothing assigned yet.</td></tr>`;
   return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
   ${classCard()}
   <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
@@ -319,7 +319,8 @@ function viewTeacher(){
       <div class="col"><label>Current grade</label><select id="as_cur">${grades}</select></div></div>
     <div class="row" style="margin-top:10px">
       <div class="col"><label>Term</label><select id="as_term"><option value="1">Term 1</option><option value="2">Term 2</option><option value="3">Term 3</option></select></div>
-      <div class="col"><label>Publish date (calendar) — optional</label><input type="date" id="as_date"></div></div>
+      <div class="col"><label>Publish date — optional</label><input type="date" id="as_date"></div>
+      <div class="col"><label>Parent's WhatsApp — optional</label><input id="as_parent" placeholder="9715XXXXXXXX"></div></div>
     <div style="margin-top:12px"><button class="btn gold" onclick="assignDiagnostic()">Assign &amp; share</button> <span id="amsg" style="font-size:12px;color:var(--ok)"></span></div>`:`<p class="muted">Add a student first.</p>`}
   </div>
   <div class="card"><h2>Assigned diagnostics</h2><table><thead><tr><th>Student</th><th>Subject</th><th>Grades</th><th>Status</th><th></th></tr></thead><tbody>${assignRows}</tbody></table></div>
@@ -336,8 +337,9 @@ function assignDiagnostic(){
   const studentEmail=document.getElementById("as_student").value, subject=document.getElementById("as_subject").value;
   const prevGrade=document.getElementById("as_prev").value, curGrade=document.getElementById("as_cur").value;
   const term=document.getElementById("as_term").value, publishDate=document.getElementById("as_date").value||"";
+  const parent=((document.getElementById("as_parent")||{}).value||"").replace(/[^0-9]/g,"");
   const s=(AUTH.students||[]).find(x=>x.email===studentEmail);
-  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:subject,prevGrade:prevGrade,curGrade:curGrade,term:term,publishDate:publishDate,status:"pending",createdAt:Date.now()})
+  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:subject,prevGrade:prevGrade,curGrade:curGrade,term:term,publishDate:publishDate,parentPhone:parent,status:"pending",createdAt:Date.now()})
     .then(()=>{const m=document.getElementById("amsg"); if(m)m.textContent="Assigned! It is now on the student's dashboard.";})
     .catch(e=>{const m=document.getElementById("amsg"); if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
@@ -419,6 +421,67 @@ function progressGraphsHTML(email){
       ${skillBars}
     </div>`;
   }).join("");
+}
+/* ===== PARENT REPORTS — WhatsApp one-click, English + Arabic ===== */
+var AR_SKILL={"Reading":"القراءة","Writing":"الكتابة","Vocabulary":"المفردات","Grammar":"القواعد","Number & Operations":"الأعداد والعمليات","Algebra":"الجبر","Geometry":"الهندسة","Data & Probability":"البيانات والاحتمالات"};
+var AR_LEVEL={"On Track / Advanced":"على المسار الصحيح / متقدّم","Approaching":"يقترب من المستوى","Developing":"قيد التطوّر","Needs Intensive Support":"يحتاج إلى دعم مكثّف"};
+function arSkill(k){return AR_SKILL[k]||k;}
+function arGrade(id){return gLabel(id).replace("Grade","الصف").replace("Advanced","المتقدّم").replace("General","العام");}
+function buildParentReport(a,lang){
+  const sp=a.skillPct||{}, areas=skillsFor(a.subject);
+  const gaps=areas.filter(k=>sp[k]!=null&&sp[k]<55);
+  const goals=computeGoalsFor(a);
+  if(lang==="ar"){
+    const subj=a.subject==="Math"?"الرياضيات":"اللغة الإنجليزية";
+    let t="📄 تقرير الطالب من تطبيق Adeptly\n\n";
+    t+="الطالب: "+(a.studentName||"")+"\n";
+    t+="المادة: "+subj+(a.term?(" — الفصل "+a.term):"")+"\n";
+    t+="المستوى: "+(AR_LEVEL[a.level]||a.level||"")+" ("+(a.score!=null?a.score:"-")+"%)\n";
+    t+="التقييم مبني على منهج "+arGrade(a.prevGrade)+"\n\n";
+    t+="النتائج حسب المهارة:\n";
+    areas.forEach(k=>{ if(sp[k]!=null) t+="• "+arSkill(k)+": "+sp[k]+"%\n"; });
+    if(gaps.length) t+="\nمجالات تحتاج إلى دعم: "+gaps.map(arSkill).join("، ")+"\n";
+    if(goals.length){ t+="\nالأهداف القادمة:\n"; goals.forEach(g=>{ t+="• تحسين "+arSkill(g.skill)+" إلى "+g.t3+"%\n"; }); }
+    t+="\nمع تحيات: "+(a.teacherName||"المعلّم");
+    return t;
+  }
+  const subj=a.subject==="Math"?"Mathematics":"English";
+  let t="📄 Student report — Adeptly\n\n";
+  t+="Student: "+(a.studentName||"")+"\n";
+  t+="Subject: "+subj+(a.term?(" — Term "+a.term):"")+"\n";
+  t+="Level: "+(a.level||"")+" ("+(a.score!=null?a.score:"-")+"%)\n";
+  t+="Based on the "+gLabel(a.prevGrade)+" curriculum\n\n";
+  t+="Results by skill:\n";
+  areas.forEach(k=>{ if(sp[k]!=null) t+="• "+k+": "+sp[k]+"%\n"; });
+  if(gaps.length) t+="\nAreas needing support: "+gaps.join(", ")+"\n";
+  if(goals.length){ t+="\nNext goals:\n"; goals.forEach(g=>{ t+="• Improve "+g.skill+" to "+g.t3+"%\n"; }); }
+  t+="\nFrom: "+(a.teacherName||"Teacher");
+  return t;
+}
+function sendParentReport(id,lang){
+  const a=assignments().find(x=>x.id===id); if(!a)return;
+  const phone=a.parentPhone?(""+a.parentPhone).replace(/[^0-9]/g,""):"";
+  if(!phone){ alert("No valid parent WhatsApp number is on file for this student."); return; }
+  window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(buildParentReport(a,lang)),"_blank");
+}
+function copyReport(id,lang){ const a=assignments().find(x=>x.id===id); if(!a)return; const t=buildParentReport(a,lang); if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>alert("Report copied — paste it into WhatsApp, email or a document.")).catch(()=>prompt("Copy the report:",t));}else{prompt("Copy the report:",t);} }
+function sendReportMenu(id){
+  const a=assignments().find(x=>x.id===id); const m=document.getElementById("exModal"); if(!a||!m)return;
+  const phone=a.parentPhone?(""+a.parentPhone).replace(/[^0-9]/g,""):"";
+  const enPrev=buildParentReport(a,"en").replace(/</g,"&lt;"), arPrev=buildParentReport(a,"ar").replace(/</g,"&lt;");
+  m.innerHTML='<div class="ovl"><div class="ex">'+
+    '<div class="flex-between"><h2 style="margin:0">Send report to parent</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div>'+
+    '<p class="sub">'+(a.studentName||a.studentEmail)+' · '+subjChip(a.subject)+' · '+(a.score!=null?a.score+"%":"")+'</p>'+
+    (phone?'<p style="font-size:13px">Parent WhatsApp: <b>+'+phone+'</b></p>':'<div class="notice">No parent WhatsApp number on file. The student adds it under “Join a class”, or you can add it from “Add to class”. You can still copy the report below.</div>')+
+    '<div class="row"><div class="col"><h3 style="font-size:13px;margin:6px 0">English</h3><pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;background:#f3f4ff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0">'+enPrev+'</pre></div>'+
+    '<div class="col"><h3 style="font-size:13px;margin:6px 0">العربية</h3><pre dir="rtl" style="white-space:pre-wrap;font-family:inherit;font-size:12px;background:#f3f4ff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0">'+arPrev+'</pre></div></div>'+
+    '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
+    '<button class="btn" '+(phone?"":"disabled")+' onclick="sendParentReport(\''+id+'\',\'en\')">📲 Send in English</button>'+
+    '<button class="btn gold" '+(phone?"":"disabled")+' onclick="sendParentReport(\''+id+'\',\'ar\')">📲 إرسال بالعربية</button>'+
+    '<button class="btn ghost" onclick="copyReport(\''+id+'\',\'en\')">Copy EN</button>'+
+    '<button class="btn ghost" onclick="copyReport(\''+id+'\',\'ar\')">Copy AR</button></div>'+
+    '<p class="muted" style="font-size:11px;margin-top:8px">This opens WhatsApp with the message ready — you tap send. Adeptly doesn’t send messages on its own.</p>'+
+    '</div></div>'; m.style.display="block";
 }
 function viewProgressGraphs(){
   const email=(VIEWING&&VIEWING.studentEmail)?VIEWING.studentEmail:AUTH.email;
@@ -538,28 +601,32 @@ function closeClass(){S.openClassId=null;render();}
 function addToClass(id){
   const c=classesList().find(x=>x.id===id); if(!c)return;
   const name=document.getElementById("cs_name").value.trim(), email=document.getElementById("cs_email").value.trim().toLowerCase();
+  const parent=((document.getElementById("cs_parent")||{}).value||"").replace(/[^0-9]/g,"");
   const msg=document.getElementById("csmsg");
   if(!name||!email){msg.style.color="var(--red)";msg.textContent="Enter name and email.";return;}
   if(assignments().find(a=>a.classId===id&&a.studentEmail===email)){msg.style.color="var(--red)";msg.textContent="That student is already in this class.";return;}
   msg.style.color="var(--muted)";msg.textContent="Adding…";
   const td=c.termDates||{};
-  Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",status:"pending",createdAt:Date.now()})))
+  Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",parentPhone:parent,status:"pending",createdAt:Date.now()})))
     .then(()=>db.collection("users").doc(AUTH.uid).update({students:firebase.firestore.FieldValue.arrayUnion({name:name,email:email})}).catch(()=>{}))
     .then(()=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--ok)";m.textContent="Added — all three term diagnostics are on their dashboard.";}})
     .catch(e=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
 function joinClass(){
   const code=(document.getElementById("joinCode").value||"").trim().toUpperCase();
+  const parent=((document.getElementById("joinParent")||{}).value||"").replace(/[^0-9]/g,"");
   const msg=document.getElementById("joinMsg");
   if(!code){msg.style.color="var(--red)";msg.textContent="Enter a class code.";return;}
+  if(!parent||parent.length<8){msg.style.color="var(--red)";msg.textContent="Enter your parent's WhatsApp number with country code.";return;}
   msg.style.color="var(--muted)";msg.textContent="Looking up class…";
+  db.collection("users").doc(AUTH.uid).update({parentPhone:parent}).catch(()=>{}); AUTH.parentPhone=parent;
   db.collection("classes").where("joinCode","==",code).limit(1).get().then(qs=>{
     const m=document.getElementById("joinMsg");
     if(qs.empty){if(m){m.style.color="var(--red)";m.textContent="No class found with that code.";}return;}
     const d=qs.docs[0], c=Object.assign({id:d.id},d.data());
     if(assignments().find(a=>a.classId===c.id)){if(m){m.style.color="var(--red)";m.textContent="You're already in "+c.name+".";}return;}
     const td=c.termDates||{};
-    return Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",status:"pending",createdAt:Date.now()})))
+    return Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",parentPhone:parent,status:"pending",createdAt:Date.now()})))
       .then(()=>{const m2=document.getElementById("joinMsg");if(m2){m2.style.color="var(--ok)";m2.textContent="Joined "+c.name+"! Your term diagnostics are in the list below.";}});
   }).catch(e=>{const m=document.getElementById("joinMsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
@@ -580,7 +647,7 @@ function viewClass(id){
   const rosterRows=ca.length?ca.slice().sort((a,b)=>(b.score||0)-(a.score||0)).map(a=>{
     const st=a.status==="completed"?`<span class="pill ${a.levelCls||rag(a.score||0)}">${a.score}% · ${a.level||""}</span>`:(isPublished(a)?`<span class="pill amber">Pending</span>`:`<span class="pill grey">Opens ${fmtDate(a.publishDate)}</span>`);
     const flag=flaggedIds[a.id]?`<span class="pill red">Needs support</span>`:(a.status==="completed"?`<span class="pill green">On track</span>`:`<span class="muted">—</span>`);
-    const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake ✓":"Allow retake"}</button>`:"";
+    const btn=a.status==="completed"?`<button class="btn sm" onclick="teacherOpenStudent('${a.id}')">Open →</button> <button class="btn ghost sm" onclick="sendReportMenu('${a.id}')">📲 Parent</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake ✓":"Allow retake"}</button>`:"";
     return `<tr><td><b>${a.studentName||a.studentEmail}</b><div class="muted" style="font-size:11px">${a.studentEmail}</div></td><td>${st}</td><td>${flag}</td><td>${btn}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No students enrolled for Term ${term} yet.</td></tr>`;
   const benchmark=80;
@@ -617,7 +684,7 @@ function viewClass(id){
   <div class="card"><h2>Class roster — Term ${term}</h2><p class="sub">Same diagnostic for everyone this term, ranked by score. Results update live as students finish.</p>
     <table><thead><tr><th>Student</th><th>Result</th><th>Status</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Add a student to this class</h3>
-    <div class="row"><div class="col"><label>Name</label><input id="cs_name" placeholder="Student name"></div><div class="col"><label>School email</label><input id="cs_email" type="email" placeholder="student@school.ae"></div></div>
+    <div class="row"><div class="col"><label>Name</label><input id="cs_name" placeholder="Student name"></div><div class="col"><label>School email</label><input id="cs_email" type="email" placeholder="student@school.ae"></div><div class="col"><label>Parent's WhatsApp (optional)</label><input id="cs_parent" placeholder="9715XXXXXXXX"></div></div>
     <div style="margin-top:10px"><button class="btn" onclick="addToClass('${c.id}')">+ Add to class</button> <span id="csmsg" style="font-size:12px;color:var(--ok)"></span></div>
   </div>
   ${done.length?`<div class="card"><h2>Class skill averages — Term ${term}</h2><p class="sub">Average mastery per ${c.subject==="Math"?"strand":"skill"} across ${done.length} completed test(s).</p>
@@ -656,10 +723,10 @@ function viewHome(){
     return `<tr><td>${subjChip(a.subject)}${meta}<div class="muted" style="font-size:11px">shared by ${a.teacherName||a.teacherEmail}</div></td><td>Based on ${gLabel(a.prevGrade)}</td><td>${status}</td><td>${btn}</td></tr>`;
   }).join(""):`<tr><td colspan="4" class="muted">No diagnostics${(fSub||fTerm)?" match this filter":" yet. Your teacher will share one with you here"}.</td></tr>`;
   return `<div class="card"><h2>Welcome, ${(me.name||'').split(' ')[0]} 👋</h2><p class="sub">${me.email} · Student dashboard</p></div>
-  <div class="card"><h2>Join a class</h2><p class="sub">Got a class code from your teacher? Enter it to load that class's term diagnostics.</p>
+  <div class="card"><h2>Join a class</h2><p class="sub">Got a class code from your teacher? Enter it, and add your parent's WhatsApp number so your teacher can send them your reports.</p>
     <div class="row"><div class="col"><label>Class code</label><input id="joinCode" placeholder="e.g. K7P2QX" style="text-transform:uppercase;letter-spacing:2px"></div>
-    <div class="col" style="display:flex;align-items:flex-end"><button class="btn" onclick="joinClass()">Join class</button></div></div>
-    <div id="joinMsg" style="font-size:12px;margin-top:8px"></div>
+    <div class="col"><label>Parent's WhatsApp number (with country code)</label><input id="joinParent" placeholder="e.g. 9715XXXXXXXX" value="${AUTH.parentPhone||''}"></div></div>
+    <div style="margin-top:10px"><button class="btn" onclick="joinClass()">Join class</button> <span id="joinMsg" style="font-size:12px"></span></div>
   </div>
   <div class="card"><div class="flex-between"><h2 style="margin:0">My diagnostics</h2>
       <div><label style="display:inline;margin-right:6px">Term</label><select style="width:auto;display:inline-block;margin-right:10px" onchange="setSTerm(this.value)"><option value="" ${!fTerm?"selected":""}>All</option>${[1,2,3].map(t=>`<option value="${t}" ${fTerm===String(t)?"selected":""}>Term ${t}</option>`).join("")}</select>
