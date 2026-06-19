@@ -534,6 +534,27 @@ function resetDashboard(){
    comparative analysis and activities for each.
    ============================================================ */
 function genCode(){var c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",s="";for(var i=0;i<6;i++)s+=c.charAt(Math.floor(Math.random()*c.length));return s;}
+function classMembers(id){ const seen={},out=[]; assignments().filter(a=>a.classId===id).forEach(a=>{ if(!seen[a.studentEmail]){seen[a.studentEmail]=1; out.push({email:a.studentEmail,name:a.studentName});} }); return out; }
+function priorSummaryFor(email,classId,term){
+  const pt=Number(term)-1; if(pt<1) return null;
+  const p=assignments().find(a=>a.classId===classId&&a.studentEmail===email&&aTerm(a)===String(pt)&&a.status==="completed");
+  if(!p) return null;
+  return {term:String(pt),score:p.score,level:p.level||"",skillPct:p.skillPct||{},goals:p.goals||[]};
+}
+function generateTerm(classId,term){
+  const c=classesList().find(x=>x.id===classId); if(!c)return;
+  const t=String(term);
+  const members=classMembers(classId);
+  if(!members.length){ alert("No students have joined this class yet. Share the join code (Term 1 is created when a student joins), then generate later terms."); return; }
+  const pending=members.filter(m=>!assignments().find(a=>a.classId===classId&&a.studentEmail===m.email&&aTerm(a)===t));
+  if(!pending.length){ alert("Every enrolled student already has the Term "+t+" diagnostic."); return; }
+  if(!confirm("Generate the Term "+t+" diagnostic for "+pending.length+" student(s)?"+(Number(t)>1?" It will build on each student's Term "+(Number(t)-1)+" results.":""))) return;
+  const td=c.termDates||{};
+  Promise.all(pending.map(m=>{
+    const prior=priorSummaryFor(m.email,classId,t);
+    return db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:m.email,studentName:m.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:classId,className:c.name,term:t,publishDate:td[t]||"",prior:prior||null,status:"pending",createdAt:Date.now()}).catch(()=>{});
+  })).then(()=>{ S.classTerm=t; render(); });
+}
 function todayISO(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function fmtDate(s){ if(!s)return ""; const dt=new Date(s+"T00:00:00"); return isNaN(dt)?s:dt.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }
 function aTerm(a){return String((a&&a.term)||"1");}
@@ -616,9 +637,9 @@ function addToClass(id){
   if(assignments().find(a=>a.classId===id&&a.studentEmail===email)){msg.style.color="var(--red)";msg.textContent="That student is already in this class.";return;}
   msg.style.color="var(--muted)";msg.textContent="Adding…";
   const td=c.termDates||{};
-  Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",parentPhone:parent,status:"pending",createdAt:Date.now()})))
+  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:email,studentName:name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:"1",publishDate:td[1]||"",parentPhone:parent,status:"pending",createdAt:Date.now()})
     .then(()=>db.collection("users").doc(AUTH.uid).update({students:firebase.firestore.FieldValue.arrayUnion({name:name,email:email})}).catch(()=>{}))
-    .then(()=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--ok)";m.textContent="Added — all three term diagnostics are on their dashboard.";}})
+    .then(()=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--ok)";m.textContent="Added — their Term 1 diagnostic is on their dashboard. Generate later terms from the class view.";}})
     .catch(e=>{const m=document.getElementById("csmsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
 function joinClass(){
@@ -635,8 +656,8 @@ function joinClass(){
     const d=qs.docs[0], c=Object.assign({id:d.id},d.data());
     if(assignments().find(a=>a.classId===c.id)){if(m){m.style.color="var(--red)";m.textContent="You're already in "+c.name+".";}return;}
     const td=c.termDates||{};
-    return Promise.all([1,2,3].map(t=>db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:String(t),publishDate:td[t]||"",parentPhone:parent,status:"pending",createdAt:Date.now()})))
-      .then(()=>{const m2=document.getElementById("joinMsg");if(m2){m2.style.color="var(--ok)";m2.textContent="Joined "+c.name+"! Your term diagnostics are in the list below.";}});
+    return db.collection("assignments").add({teacherUid:c.teacherUid,teacherName:c.teacherName,studentEmail:AUTH.email,studentName:AUTH.name,subject:c.subject,prevGrade:c.prevGrade,curGrade:c.curGrade,classId:c.id,className:c.name,term:"1",publishDate:td[1]||"",parentPhone:parent,status:"pending",createdAt:Date.now()})
+      .then(()=>{const m2=document.getElementById("joinMsg");if(m2){m2.style.color="var(--ok)";m2.textContent="Joined "+c.name+"! Your Term 1 diagnostic is in the list below.";}});
   }).catch(e=>{const m=document.getElementById("joinMsg");if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
 function viewClass(id){
@@ -690,6 +711,12 @@ function viewClass(id){
     <div class="row">${[1,2,3].map(t=>`<div class="col"><label style="font-weight:600;text-transform:none">Term ${t}</label><input type="date" value="${td[t]||""}" onchange="updateTermDate('${c.id}','${t}',this.value)"></div>`).join("")}</div>
     <p class="muted" style="font-size:11px;margin-top:6px">Changing a date updates when that term's diagnostic opens for every student in the class.</p>
   </div>
+  ${(function(){
+    const has=ca.length>0;
+    if(term==="1") return has?`<div class="notice" style="background:#eef2ff;border-color:#d6dbff;color:var(--ink)">✅ Term 1 is created automatically when a student joins. ${students} enrolled.</div>`:`<div class="notice">Share the join code so students can enrol — each student's Term 1 diagnostic is created automatically when they join.</div>`;
+    if(has) return `<div class="notice" style="background:#eef2ff;border-color:#d6dbff;color:var(--ink)">✅ Term ${term} diagnostic generated for ${ca.length} student(s)${Number(term)>1?`, built on their Term ${Number(term)-1} results`:""}. <button class="btn ghost sm" onclick="generateTerm('${c.id}','${term}')">Generate for newly-joined students</button></div>`;
+    return `<div class="card" style="border:1px solid #c7b8f5;background:#faf8ff"><h3 style="margin:0 0 4px;font-size:15px">⚡ Term ${term} not generated yet</h3><p class="sub" style="margin:0 0 10px">Students see Term ${term} only after you generate it. It will be built on each student's Term ${Number(term)-1} results, so the goals and activities continue from where they left off.</p><button class="btn" onclick="generateTerm('${c.id}','${term}')">Generate Term ${term} diagnostic for the class</button></div>`;
+  })()}
   <div class="card"><h2>Class roster — Term ${term}</h2><p class="sub">Same diagnostic for everyone this term, ranked by score. Results update live as students finish.</p>
     <table><thead><tr><th>Student</th><th>Result</th><th>Status</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Add a student to this class</h3>
@@ -761,6 +788,7 @@ function openAssignment(id,completed){
   if(a.status!=="completed" && !isPublished(a)){ alert("This diagnostic opens on "+fmtDate(a.publishDate)+"."); return; }
   S.activeAssignment=id;
   S.student={name:AUTH.name,subject:a.subject,prevGrade:a.prevGrade,curGrade:a.curGrade};
+  S.prior=a.prior||null; S.curTerm=a.term||"1";
   S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";S.activeTab="diagnostic";
   save(); render();
 }
@@ -823,7 +851,8 @@ function viewDiagnostic(){
     The curriculum for this grade is loaded (see Gap Analysis &amp; Curriculum), but diagnostic <b>items</b> still need to be authored.<br>
     To try the full demo now, set <b>previous = Grade 6</b> and <b>current = Grade 7</b>.</div></div>`;}
   let html=`<div class="card"><h2>Diagnostic Test — based on ${gLabel(S.student.prevGrade)} ${S.student.subject}</h2>
-    <p class="sub">${S.student.name} is entering ${gLabel(S.student.curGrade)}. This test checks mastery of the prior grade before measuring readiness for the new one.</p>`;
+    <p class="sub">${S.student.name} is entering ${gLabel(S.student.curGrade)}. This test checks mastery of the prior grade before measuring readiness for the new one.</p>
+    ${S.prior?`<div class="notice" style="background:#eef2ff;border-color:#d6dbff;color:var(--ink)">This is your <b>Term ${S.curTerm||""}</b> diagnostic — it builds on your <b>Term ${S.prior.term}</b> results (overall ${S.prior.score}%). Your plan continues to target the skills you were still developing.</div>`:""}`;
   qs.forEach((q,i)=>{
     html+=`<div class="q"><div class="meta">${q.skill}</div><div class="stem">Q${i+1}. ${q.q}</div>`;
     q.options.forEach((o,oi)=>{
@@ -1002,7 +1031,8 @@ const ACTIVITY_LIB={
 function generatePlan(){
   const subj=S.student.subject, areas=skillsFor(subj);
   const gaps=areas.filter(a=>S.result.skillPct[a]<55);
-  const focus = gaps.length?gaps:areas.slice();
+  let focus = gaps.length?gaps:areas.slice();
+  if(S.prior&&S.prior.skillPct){ areas.forEach(a=>{ if(S.prior.skillPct[a]!=null && S.prior.skillPct[a]<55 && focus.indexOf(a)<0) focus.push(a); }); }
   const WEEKS=6;
   const terms={};
   ["1","2","3"].forEach((t,ti)=>{
