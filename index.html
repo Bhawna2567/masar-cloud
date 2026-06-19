@@ -464,6 +464,14 @@ function sendParentReport(id,lang){
   if(!phone){ alert("No valid parent WhatsApp number is on file for this student."); return; }
   window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(buildParentReport(a,lang)),"_blank");
 }
+function sendWA(id,lang){
+  const a=assignments().find(x=>x.id===id); if(!a)return;
+  const inp=document.getElementById("pr_phone");
+  const phone=((inp?inp.value:(a.parentPhone||""))+"").replace(/[^0-9]/g,"");
+  if(!phone||phone.length<8){ alert("Enter the parent's WhatsApp number with country code (e.g. 9715XXXXXXXX)."); return; }
+  assignments().filter(x=>x.studentEmail===a.studentEmail && (((""+(x.parentPhone||"")).replace(/[^0-9]/g,""))!==phone)).forEach(x=>db.collection("assignments").doc(x.id).update({parentPhone:phone}).catch(()=>{}));
+  window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(buildParentReport(a,lang)),"_blank");
+}
 function copyReport(id,lang){ const a=assignments().find(x=>x.id===id); if(!a)return; const t=buildParentReport(a,lang); if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>alert("Report copied — paste it into WhatsApp, email or a document.")).catch(()=>prompt("Copy the report:",t));}else{prompt("Copy the report:",t);} }
 function sendReportMenu(id){
   const a=assignments().find(x=>x.id===id); const m=document.getElementById("exModal"); if(!a||!m)return;
@@ -472,12 +480,13 @@ function sendReportMenu(id){
   m.innerHTML='<div class="ovl"><div class="ex">'+
     '<div class="flex-between"><h2 style="margin:0">Send report to parent</h2><button class="btn ghost sm" onclick="closeExercise()">✕</button></div>'+
     '<p class="sub">'+(a.studentName||a.studentEmail)+' · '+subjChip(a.subject)+' · '+(a.score!=null?a.score+"%":"")+'</p>'+
-    (phone?'<p style="font-size:13px">Parent WhatsApp: <b>+'+phone+'</b></p>':'<div class="notice">No parent WhatsApp number on file. The student adds it under “Join a class”, or you can add it from “Add to class”. You can still copy the report below.</div>')+
+    '<div class="row" style="margin:4px 0 6px"><div class="col"><label>Parent\'s WhatsApp number (with country code)</label><input id="pr_phone" value="'+phone+'" placeholder="e.g. 9715XXXXXXXX"></div></div>'+
+    (phone?'':'<p class="muted" style="font-size:11px;margin:0 0 6px">No number was on file — type it above to enable sending. It’s saved for next time.</p>')+
     '<div class="row"><div class="col"><h3 style="font-size:13px;margin:6px 0">English</h3><pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;background:#f3f4ff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0">'+enPrev+'</pre></div>'+
     '<div class="col"><h3 style="font-size:13px;margin:6px 0">العربية</h3><pre dir="rtl" style="white-space:pre-wrap;font-family:inherit;font-size:12px;background:#f3f4ff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0">'+arPrev+'</pre></div></div>'+
     '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
-    '<button class="btn" '+(phone?"":"disabled")+' onclick="sendParentReport(\''+id+'\',\'en\')">📲 Send in English</button>'+
-    '<button class="btn gold" '+(phone?"":"disabled")+' onclick="sendParentReport(\''+id+'\',\'ar\')">📲 إرسال بالعربية</button>'+
+    '<button class="btn" onclick="sendWA(\''+id+'\',\'en\')">📲 Send in English</button>'+
+    '<button class="btn gold" onclick="sendWA(\''+id+'\',\'ar\')">📲 إرسال بالعربية</button>'+
     '<button class="btn ghost" onclick="copyReport(\''+id+'\',\'en\')">Copy EN</button>'+
     '<button class="btn ghost" onclick="copyReport(\''+id+'\',\'ar\')">Copy AR</button></div>'+
     '<p class="muted" style="font-size:11px;margin-top:8px">This opens WhatsApp with the message ready — you tap send. Adeptly doesn’t send messages on its own.</p>'+
