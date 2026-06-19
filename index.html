@@ -215,6 +215,7 @@ const TABS=[
   {id:"plan",label:"6 · Skill Development Plan",need:"result"},
   {id:"folders",label:"7 · Weekly Folders",need:"plan"},
   {id:"tracker",label:"8 · Progress Tracker",need:"plan"},
+  {id:"graphs",label:"📊 Progress Graphs",always:true},
   {id:"curriculum",label:"📚 Curriculum",need:"student"}
 ];
 function tabEnabled(t){ if(t.always)return true; if(t.need==="student")return !!S.student; if(t.need==="result")return !!S.result; if(t.need==="plan")return !!S.plan; return true; }
@@ -239,7 +240,7 @@ function render(){
   if(!AUTH){ tabsEl.innerHTML=""; v.innerHTML=viewAuth(); window.scrollTo(0,0); return; }
   if(AUTH.role==="teacher" && !VIEWING){ tabsEl.innerHTML=""; v.innerHTML=S.openClassId?viewClass(S.openClassId):viewTeacher(); window.scrollTo(0,0); return; }
   renderTabs();
-  const map={home:viewHome,setup:viewSetup,diagnostic:viewDiagnostic,results:viewResults,gaps:viewGaps,report:viewReport,goals:viewGoals,plan:viewPlan,folders:viewFolders,tracker:viewTracker,curriculum:viewCurriculum};
+  const map={home:viewHome,setup:viewSetup,diagnostic:viewDiagnostic,results:viewResults,gaps:viewGaps,report:viewReport,goals:viewGoals,plan:viewPlan,folders:viewFolders,tracker:viewTracker,graphs:viewProgressGraphs,curriculum:viewCurriculum};
   if(!tabEnabled(TABS.find(t=>t.id===S.activeTab))){S.activeTab=VIEWING?"results":"home";}
   let inner=(map[S.activeTab]||viewHome)();
   if(VIEWING) inner=`<div class="notice" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">👁 Viewing <b>${VIEWING.studentName}</b>'s dashboard (read-only) <button class="btn ghost sm" onclick="teacherCloseStudent()">← Back to my dashboard</button></div>`+inner;
@@ -372,7 +373,7 @@ function showAssignmentProgress(id){
 function teacherOpenStudent(id){
   const a=assignments().find(x=>x.id===id);
   if(!a||!a.snapshot){ alert("This student hasn't completed a diagnostic yet, so there is no dashboard to open."); return; }
-  VIEWING={assignmentId:id, studentName:a.studentName};
+  VIEWING={assignmentId:id, studentName:a.studentName, studentEmail:a.studentEmail};
   READONLY=true;
   S=JSON.parse(JSON.stringify(a.snapshot));
   if(!S.taskDone) S.taskDone={};
@@ -380,6 +381,49 @@ function teacherOpenStudent(id){
   render();
 }
 function teacherCloseStudent(){ VIEWING=null; READONLY=false; S=freshState(); render(); }
+
+/* ===== PROGRESS GRAPHS (per subject: year-by-term + term-by-skill) ===== */
+function subjectsForStudent(email){ const set={}; assignments().filter(a=>a.studentEmail===email).forEach(a=>{set[a.subject]=1;}); return Object.keys(set); }
+function termAssignmentFor(email,subject,term){
+  const cand=assignments().filter(a=>a.studentEmail===email&&a.subject===subject&&aTerm(a)===String(term));
+  cand.sort((a,b)=>(b.completedAt||b.createdAt||0)-(a.completedAt||a.createdAt||0));
+  return cand.find(a=>a.progress)||cand.find(a=>a.status==="completed")||cand[0]||null;
+}
+function pgLatestTerm(email,subject){ for(let t=3;t>=1;t--){const a=termAssignmentFor(email,subject,t); if(a&&a.status==="completed")return String(t);} return "1"; }
+function setPgTerm(v){ S.pgTerm=v; if(AUTH&&AUTH.role==="student")save(); render(); }
+function progressGraphsHTML(email){
+  const subs=subjectsForStudent(email);
+  if(!subs.length) return `<div class="card"><h2>📊 Progress graphs</h2><p class="muted" style="margin:0">No diagnostics yet, so there's no progress to chart.</p></div>`;
+  const order=["English","Math"].filter(s=>subs.indexOf(s)>=0).concat(subs.filter(s=>["English","Math"].indexOf(s)<0));
+  return order.map(subject=>{
+    const termVals=[1,2,3].map(t=>{const a=termAssignmentFor(email,subject,t);return {t:t,pct:(a&&a.progress)?a.progress.yearPct:0,has:!!(a&&a.status==="completed")};});
+    const yearBars=`<div class="chartwrap">${termVals.map(tv=>`<div class="colbar"><span style="font-size:11px;font-weight:700">${tv.has?tv.pct+"%":"—"}</span><div class="vb" style="height:${tv.pct}%"></div><span style="font-size:11px;color:var(--muted)">Term ${tv.t}</span></div>`).join("")}</div>`;
+    const selTerm=String(S.pgTerm||pgLatestTerm(email,subject));
+    const aSel=termAssignmentFor(email,subject,selTerm);
+    let skillBars;
+    if(aSel&&aSel.progress&&aSel.progress.focus&&aSel.progress.focus.length){
+      skillBars=aSel.progress.focus.map(f=>`<div style="margin-bottom:11px"><div class="flex-between" style="font-size:12px"><span><b>${f.skill}</b> <span class="muted">from ${f.baseline}%</span></span><span style="font-weight:700">${f.planPct}%</span></div><div class="bar"><span style="width:${f.planPct}%;background:${f.planPct>=60?'var(--ok)':f.planPct>0?'var(--amber)':'var(--line)'}"></span></div></div>`).join("");
+    } else if(aSel&&((aSel.goals&&aSel.goals.length)||(aSel.status==="completed"))){
+      const gs=(aSel.goals&&aSel.goals.length)?aSel.goals:computeGoalsFor(aSel);
+      skillBars=gs.length?gs.map(g=>`<div style="margin-bottom:11px"><div class="flex-between" style="font-size:12px"><span><b>${g.skill}</b> <span class="muted">target ${g.t3}%</span></span><span class="muted">0%</span></div><div class="bar"><span style="width:0%"></span></div></div>`).join(""):`<p class="muted" style="font-size:13px">No targeted goals this term.</p>`;
+    } else {
+      skillBars=`<p class="muted" style="font-size:13px">Term ${selTerm} hasn't been completed yet — no goal progress to show.</p>`;
+    }
+    const termSel=`<select style="width:auto;display:inline-block" onchange="setPgTerm(this.value)">${[1,2,3].map(t=>`<option value="${t}" ${selTerm===String(t)?"selected":""}>Term ${t}</option>`).join("")}</select>`;
+    return `<div class="card"><h2>${subjChip(subject)} progress</h2>
+      <h3 style="font-size:14px;margin:12px 0 2px">Year progress — completion by term</h3>
+      <p class="sub">Overall share of each term's skill-plan activities completed across the year.</p>
+      ${yearBars}
+      <div class="flex-between" style="margin:20px 0 2px"><h3 style="font-size:14px;margin:0">Term progress — by targeted goal &amp; skill</h3><div><label style="display:inline;margin-right:6px">Term</label>${termSel}</div></div>
+      <p class="sub">Progress on each targeted skill's activities within the selected term.</p>
+      ${skillBars}
+    </div>`;
+  }).join("");
+}
+function viewProgressGraphs(){
+  const email=(VIEWING&&VIEWING.studentEmail)?VIEWING.studentEmail:AUTH.email;
+  return `<div class="card"><h2>📊 Progress graphs</h2><p class="sub">Two separate bar charts per subject: <b>year progress</b> (completion by term) and <b>term progress</b> (by targeted goal &amp; skill). English and Mathematics are shown separately.</p></div>${progressGraphsHTML(email)}`;
+}
 function removeStudent(email){
   if(!confirm("Remove this student from your roster?\n\n(Their diagnostics are kept — delete those separately if you also want them gone.)"))return;
   const list=(AUTH.students||[]).filter(s=>s.email!==email);
