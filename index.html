@@ -286,7 +286,14 @@ function doRegister(){
 function verifyBanner(){
   try{ var u=fbAuth.currentUser; if(u && !u.emailVerified){ return '<div class="notice" style="background:#fff8e8;border-color:#f0e2b8;color:#7a5d00;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">✉️ Please verify your email — we sent a link to <b>'+(u.email||"")+'</b>. (Check spam too.) <button class="btn ghost sm" onclick="resendVerification()">Resend email</button></div>'; } }catch(e){} return "";
 }
-function resendVerification(){ try{ fbAuth.currentUser.sendEmailVerification().then(function(){alert("Verification email sent — check your inbox and spam folder.");}).catch(function(e){alert(fbErr(e));}); }catch(e){} }
+function resendVerification(){
+  var u=fbAuth.currentUser;
+  if(!u){ alert("You're not signed in right now. Please log out and log back in, then try Resend again."); return; }
+  if(u.emailVerified){ alert("Good news — your email is already verified ✓"); render(); return; }
+  u.sendEmailVerification()
+    .then(function(){ alert("Verification email sent to "+(u.email||"your address")+".\n\nCheck your inbox AND your spam/junk folder. It comes from noreply@masar-22cd5.firebaseapp.com."); })
+    .catch(function(e){ var c=(e&&e.code)||""; if(c.indexOf("too-many-requests")>=0){ alert("Too many requests just now — please wait a few minutes and try again."); } else { alert("Couldn't send the email: "+((e&&e.message)||e)); } });
+}
 function exportBackup(){
   try{
     var data={ exportedAt:new Date().toISOString(), teacher:{name:AUTH.name,email:AUTH.email}, classes:classesList(), assignments:assignments() };
