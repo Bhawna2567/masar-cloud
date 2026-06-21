@@ -129,6 +129,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script>
 /* ============================================================
@@ -151,6 +152,7 @@ if (typeof QUESTION_BANK === "undefined") { var QUESTION_BANK = {}; }
 
 /* ---- Firebase Auth + Firestore data layer (cloud) ---- */
 try{ firebase.initializeApp(firebaseConfig); }catch(e){ console.warn("Firebase init:",e); }
+try{ if(typeof APPCHECK_SITE_KEY!=="undefined" && APPCHECK_SITE_KEY && APPCHECK_SITE_KEY.indexOf("PASTE_")<0 && firebase.appCheck){ firebase.appCheck().activate(APPCHECK_SITE_KEY, true); } }catch(e){ console.warn("App Check:",e); }
 const fbAuth=firebase.auth(), db=firebase.firestore();
 let AUTH=null, CACHE={assignments:[],classes:[]}, _unsub=[];
 let VIEWING=null, READONLY=false;
