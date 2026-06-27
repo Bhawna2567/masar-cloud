@@ -154,12 +154,13 @@ if (typeof QUESTION_BANK === "undefined") { var QUESTION_BANK = {}; }
 try{ firebase.initializeApp(firebaseConfig); }catch(e){ console.warn("Firebase init:",e); }
 try{ if(typeof APPCHECK_SITE_KEY!=="undefined" && APPCHECK_SITE_KEY && APPCHECK_SITE_KEY.indexOf("PASTE_")<0 && firebase.appCheck){ firebase.appCheck().activate(APPCHECK_SITE_KEY, true); } }catch(e){ console.warn("App Check:",e); }
 const fbAuth=firebase.auth(), db=firebase.firestore();
-let AUTH=null, CACHE={assignments:[],classes:[]}, _unsub=[];
+let AUTH=null, CACHE={assignments:[],classes:[],tests:[]}, _unsub=[];
 let VIEWING=null, READONLY=false;
 function lsGet(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function lsSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
 function assignments(){return CACHE.assignments;}
 function classesList(){return CACHE.classes||[];}
+function teacherTests(){return CACHE.tests||[];}
 function freshState(){return {student:null,answers:{},result:null,plan:null,taskDone:{},writeResponse:"",activeTab:"home",authMode:"login"};}
 function stateKey(){return "masar_cloud_state_"+(AUTH?AUTH.uid:"guest");}
 let S=freshState();
@@ -186,6 +187,7 @@ function startListeners(){
   if(AUTH.role==="teacher"){
     _unsub.push(db.collection("assignments").where("teacherUid","==",AUTH.uid).onSnapshot(s=>{CACHE.assignments=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
     _unsub.push(db.collection("classes").where("teacherUid","==",AUTH.uid).onSnapshot(s=>{CACHE.classes=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
+    _unsub.push(db.collection("tests").where("teacherUid","==",AUTH.uid).onSnapshot(s=>{CACHE.tests=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
     _unsub.push(db.collection("users").doc(AUTH.uid).onSnapshot(d=>{ if(d.exists){ AUTH=Object.assign({},AUTH,d.data(),{uid:AUTH.uid}); render(); } }, e=>console.warn(e)));
   } else {
     _unsub.push(db.collection("assignments").where("studentEmail","==",AUTH.email).onSnapshot(s=>{CACHE.assignments=s.docs.map(d=>Object.assign({id:d.id},d.data())); render();}, e=>console.warn(e)));
@@ -325,6 +327,7 @@ function viewTeacher(){
   const assignRows=as.length?as.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(a=>`<tr><td>${a.studentName||a.studentEmail}</td><td>${subjChip(a.subject)}</td><td>${gLabel(a.prevGrade)} → ${gLabel(a.curGrade)}</td><td>${a.status==="completed"?`<span class="pill green">Done · ${a.score}%</span>`:`<span class="pill amber">Pending</span>`}</td><td>${a.status==="completed"?`<button class="btn ghost sm" onclick="sendReportMenu('${a.id}')">📲 Parent</button> <button class="btn ghost sm" onclick="allowRetake('${a.id}')">${a.retakeAllowed?"Retake allowed ✓":"Allow retake"}</button> `:""}<button class="btn ghost sm" onclick="deleteAssignment('${a.id}')">Delete</button></td></tr>`).join(""):`<tr><td colspan="5" class="muted">Nothing assigned yet.</td></tr>`;
   return `<div class="card"><h2>Teacher Dashboard</h2><p class="sub">${me.name} · ${me.email}</p></div>
   ${classCard()}
+  ${importCard()}
   <div class="card"><h2>My students</h2><p class="sub">Add the students you teach, then assign diagnostics. They log in from their own device.</p>
     <table><thead><tr><th>Student</th><th>Diagnostics</th><th>Latest result</th><th>Plan progress</th><th></th></tr></thead><tbody>${rosterRows}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 6px">Add a student</h3>
@@ -335,7 +338,8 @@ function viewTeacher(){
   <div class="card"><h2>Assign &amp; share a diagnostic</h2><p class="sub">Pick a student and the test — it appears on their dashboard the moment they log in.</p>
     ${roster.length?`<div class="row">
       <div class="col"><label>Student</label><select id="as_student">${studentOpts}</select></div>
-      <div class="col"><label>Subject</label><select id="as_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div></div>
+      <div class="col"><label>Subject</label><select id="as_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div>
+      <div class="col"><label>Diagnostic test</label><select id="as_test"><option value="">Built-in (by grade)</option>${teacherTests().map(t=>`<option value="${t.id}">${(t.title||"Untitled")} · ${t.subject==="Math"?"Math":"Eng"} · ${(t.questions||[]).length}Q</option>`).join("")}</select></div></div>
     <div class="row" style="margin-top:10px">
       <div class="col"><label>Diagnostic grade (previous)</label><select id="as_prev">${grades}</select></div>
       <div class="col"><label>Current grade</label><select id="as_cur">${grades}</select></div></div>
@@ -362,8 +366,12 @@ function assignDiagnostic(){
   const term=document.getElementById("as_term").value, publishDate=document.getElementById("as_date").value||"";
   const parent=((document.getElementById("as_parent")||{}).value||"").replace(/[^0-9]/g,"");
   const s=(AUTH.students||[]).find(x=>x.email===studentEmail);
-  db.collection("assignments").add({teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:subject,prevGrade:prevGrade,curGrade:curGrade,term:term,publishDate:publishDate,parentPhone:parent,status:"pending",createdAt:Date.now()})
-    .then(()=>{const m=document.getElementById("amsg"); if(m)m.textContent="Assigned! It is now on the student's dashboard.";})
+  const testId=(document.getElementById("as_test")||{}).value||"";
+  const ct=testId?teacherTests().find(x=>x.id===testId):null;
+  const payload={teacherUid:AUTH.uid,teacherEmail:AUTH.email,teacherName:AUTH.name,studentEmail:studentEmail,studentName:s?s.name:studentEmail,subject:ct?ct.subject:subject,prevGrade:ct?ct.grade:prevGrade,curGrade:curGrade,term:term,publishDate:publishDate,parentPhone:parent,status:"pending",createdAt:Date.now()};
+  if(ct){ payload.customQuestions=ct.questions||[]; payload.customTitle=ct.title||"Custom test"; }
+  db.collection("assignments").add(payload)
+    .then(()=>{const m=document.getElementById("amsg"); if(m)m.textContent=ct?("Assigned “"+ct.title+"” — it's on the student's dashboard."):"Assigned! It is now on the student's dashboard.";})
     .catch(e=>{const m=document.getElementById("amsg"); if(m){m.style.color="var(--red)";m.textContent=fbErr(e);}});
 }
 function showAssignmentResult(id){
@@ -455,6 +463,76 @@ function renderLockBadge(){
   document.body.appendChild(d);
 }
 function removeLockBadge(){ var b=document.getElementById("lockBadge"); if(b&&b.parentNode)b.parentNode.removeChild(b); }
+
+/* ===== QUICK IMPORT — teacher pastes their own test, app builds it ===== */
+function parseImport(text, areas){
+  var lines=(text||"").split(/\r?\n/), out=[], warnings=[], cur=null;
+  function isOpt(l){ return /^\s*(\*|[\-•]|[A-Za-z][\.\)])\s+/.test(l); }
+  var skillRe=/^\s*\[\s*skill\s*:\s*(.+?)\s*\]\s*$/i;
+  function finalize(){ if(cur){ if(cur.options.length>=2){ if(cur.answer<0){ cur.answer=0; warnings.push('"'+cur.q.slice(0,32)+'…": no correct option marked with *, used the first option.'); } out.push(cur); } else if(cur.q){ warnings.push('"'+cur.q.slice(0,32)+'…": needs at least 2 options — skipped.'); } } cur=null; }
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i].replace(/\s+$/,"");
+    if(!line.trim()){ continue; }
+    var sm=line.match(skillRe);
+    if(sm && cur){ cur.skill=sm[1].trim(); continue; }
+    if(cur && isOpt(line)){
+      var t=line.trim(), correct=false;
+      if(/^\*/.test(t)){ correct=true; t=t.replace(/^\*\s*/,""); }
+      else { t=t.replace(/^[\-•]\s*/,"").replace(/^[A-Za-z][\.\)]\s*/,""); }
+      if(/\*\s*$/.test(t)){ correct=true; t=t.replace(/\s*\*\s*$/,""); }
+      if(/\(\s*correct\s*\)\s*$/i.test(t)){ correct=true; t=t.replace(/\s*\(\s*correct\s*\)\s*$/i,""); }
+      var idx=cur.options.length; cur.options.push(t.trim()); if(correct)cur.answer=idx;
+      continue;
+    }
+    finalize();
+    var q=line.trim().replace(/^\s*(\d+[\.\)]|Q\s*[:\.\)]?)\s*/i,"");
+    cur={q:q, options:[], answer:-1, skill:null};
+  }
+  finalize();
+  for(var j=0;j<out.length;j++){ if(!out[j].skill || areas.indexOf(out[j].skill)<0){ out[j].skill=areas[j%areas.length]; } }
+  return {questions:out, warnings:warnings};
+}
+function previewImport(){
+  var subj=document.getElementById("imp_subject").value;
+  var res=parseImport(document.getElementById("imp_text").value, skillsFor(subj));
+  var el=document.getElementById("imp_preview"); if(!el)return;
+  if(!res.questions.length){ el.innerHTML='<p class="muted" style="font-size:13px">No questions detected yet — paste in the format shown above, then Preview.</p>'; return; }
+  var html='<p style="font-size:13px;margin:0 0 8px"><b>'+res.questions.length+' question(s) detected.</b></p>';
+  html+=res.questions.slice(0,6).map(function(qq,i){ return '<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px"><b>Q'+(i+1)+'.</b> '+qq.q.replace(/</g,"&lt;")+' <span class="tag">'+qq.skill+'</span><div style="margin-top:4px">'+qq.options.map(function(o,oi){ return (oi===qq.answer?'✅ ':'• ')+o.replace(/</g,"&lt;"); }).join('<br>')+'</div></div>'; }).join("");
+  if(res.questions.length>6) html+='<p class="muted" style="font-size:12px">…and '+(res.questions.length-6)+' more.</p>';
+  if(res.warnings.length) html+='<div class="notice" style="margin-top:8px">⚠ '+res.warnings.length+' note(s):<br>'+res.warnings.map(function(w){return "• "+w.replace(/</g,"&lt;");}).join("<br>")+'</div>';
+  el.innerHTML=html;
+}
+function saveImportedTest(){
+  var title=document.getElementById("imp_title").value.trim();
+  var subj=document.getElementById("imp_subject").value, grade=document.getElementById("imp_grade").value;
+  var msg=document.getElementById("imp_msg");
+  if(!title){ msg.style.color="var(--red)"; msg.textContent="Give your test a name."; return; }
+  var res=parseImport(document.getElementById("imp_text").value, skillsFor(subj));
+  if(!res.questions.length){ msg.style.color="var(--red)"; msg.textContent="No questions detected — check the format and Preview first."; return; }
+  msg.style.color="var(--muted)"; msg.textContent="Saving…";
+  db.collection("tests").add({teacherUid:AUTH.uid, title:title, subject:subj, grade:grade, questions:res.questions, createdAt:Date.now()})
+    .then(function(){ var m=document.getElementById("imp_msg"); if(m){ m.style.color="var(--ok)"; m.textContent="Saved “"+title+"” ("+res.questions.length+" questions). Assign it under “Assign & share”."; } })
+    .catch(function(e){ var m=document.getElementById("imp_msg"); if(m){ m.style.color="var(--red)"; m.textContent=fbErr(e); } });
+}
+function deleteTest(id){ if(!confirm("Delete this imported test? Diagnostics already assigned with it are not affected."))return; db.collection("tests").doc(id).delete().catch(function(e){alert(fbErr(e));}); }
+function importCard(){
+  var grades=GRADES.map(function(g){return '<option value="'+g.id+'">'+g.label+'</option>';}).join("");
+  var ts=teacherTests();
+  var list=ts.length? '<table><thead><tr><th>Test</th><th>Subject</th><th>Grade</th><th>Qs</th><th></th></tr></thead><tbody>'+ts.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).map(function(t){ return '<tr><td><b>'+(t.title||"Untitled")+'</b></td><td>'+subjChip(t.subject)+'</td><td>'+gLabel(t.grade)+'</td><td>'+((t.questions||[]).length)+'</td><td><button class="btn ghost sm" onclick="deleteTest(\''+t.id+'\')">Delete</button></td></tr>'; }).join("")+'</tbody></table>' : '<p class="muted" style="font-size:13px">No imported tests yet — paste one below.</p>';
+  return '<div class="card"><h2>⚡ Quick import — use your own test</h2><p class="sub">Paste a test you wrote and Adeptly turns it into an online diagnostic. Then assign it under “Assign &amp; share”.</p>'
+    + list
+    + '<h3 style="font-size:14px;margin:18px 0 6px">Import a new test</h3>'
+    + '<div class="row"><div class="col"><label>Test name</label><input id="imp_title" placeholder="e.g. Grade 7 Algebra check"></div>'
+    + '<div class="col"><label>Subject</label><select id="imp_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div>'
+    + '<div class="col"><label>Grade it tests</label><select id="imp_grade">'+grades+'</select></div></div>'
+    + '<label style="margin-top:10px">Paste your questions</label>'
+    + '<textarea id="imp_text" rows="9" placeholder="1. What is 12 × 8?&#10;- 84&#10;* 96&#10;- 108&#10;[skill: Number &amp; Operations]&#10;&#10;2. Which word is a noun?&#10;- quickly&#10;* river&#10;- bright" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:13px;font-family:ui-monospace,Menlo,monospace;resize:vertical"></textarea>'
+    + '<p class="muted" style="font-size:11px;margin:6px 0 0">Format: each question on its own line (numbering optional). List options below it — mark the <b>correct</b> one with a leading <b>*</b>, the others with <b>-</b>. Optional <b>[skill: …]</b> line tags the skill (Reading, Writing, Vocabulary, Grammar, or a Maths strand); untagged questions are spread across skills automatically. Separate questions with a blank line.</p>'
+    + '<div style="margin-top:10px"><button class="btn ghost" onclick="previewImport()">Preview</button> <button class="btn" onclick="saveImportedTest()">Save test</button> <span id="imp_msg" style="font-size:12px;color:var(--ok)"></span></div>'
+    + '<div id="imp_preview" style="margin-top:12px"></div>'
+    + '</div>';
+}
 
 /* ===== PROGRESS GRAPHS (per subject: year-by-term + term-by-skill) ===== */
 function subjectsForStudent(email){ const set={}; assignments().filter(a=>a.studentEmail===email).forEach(a=>{set[a.subject]=1;}); return Object.keys(set); }
@@ -861,6 +939,7 @@ function openAssignment(id,completed){
   S.activeAssignment=id;
   S.student={name:AUTH.name,subject:a.subject,prevGrade:a.prevGrade,curGrade:a.curGrade};
   S.prior=a.prior||null; S.curTerm=a.term||"1";
+  S.customQuestions=a.customQuestions||null; S.customTitle=a.customTitle||null;
   S.answers={};S.result=null;S.plan=null;S.taskDone={};S.writeResponse="";S.activeTab="diagnostic";
   save(); render(); lockdownStart();
 }
@@ -908,6 +987,7 @@ function saveStudent(){
 }
 
 function getQuestions(){
+  if(S.customQuestions && S.customQuestions.length) return S.customQuestions;
   const g=S.student.prevGrade, subj=S.student.subject;
   return (QUESTION_BANK[g]&&QUESTION_BANK[g][subj])?QUESTION_BANK[g][subj]:null;
 }
@@ -922,7 +1002,7 @@ function viewDiagnostic(){
     A question bank for <b>${gLabel(S.student.prevGrade)} · ${S.student.subject}</b> hasn't been added yet.<br>
     The curriculum for this grade is loaded (see Gap Analysis &amp; Curriculum), but diagnostic <b>items</b> still need to be authored.<br>
     To try the full demo now, set <b>previous = Grade 6</b> and <b>current = Grade 7</b>.</div></div>`;}
-  let html=`<div class="card"><h2>Diagnostic Test — based on ${gLabel(S.student.prevGrade)} ${S.student.subject}</h2>
+  let html=`<div class="card"><h2>${S.customTitle?S.customTitle.replace(/</g,"&lt;"):("Diagnostic Test — based on "+gLabel(S.student.prevGrade)+" "+S.student.subject)}</h2>
     <p class="sub">${S.student.name} is entering ${gLabel(S.student.curGrade)}. This test checks mastery of the prior grade before measuring readiness for the new one.</p>
     ${S.prior?`<div class="notice" style="background:#eef2ff;border-color:#d6dbff;color:var(--ink)">This is your <b>Term ${S.curTerm||""}</b> diagnostic — it builds on your <b>Term ${S.prior.term}</b> results (overall ${S.prior.score}%). Your plan continues to target the skills you were still developing.</div>`:""}`;
   qs.forEach((q,i)=>{
@@ -933,7 +1013,7 @@ function viewDiagnostic(){
     });
     html+=`</div>`;
   });
-  if(S.student.subject==="English" && typeof WRITING_PROMPTS!=="undefined" && WRITING_PROMPTS[S.student.prevGrade]){
+  if(!(S.customQuestions&&S.customQuestions.length) && S.student.subject==="English" && typeof WRITING_PROMPTS!=="undefined" && WRITING_PROMPTS[S.student.prevGrade]){
     html+=`<div class="q"><div class="meta">Writing · Written Response</div>
       <div class="stem">✍️ Writing Task — write a full response in the box below:</div>
       <p style="font-size:14px;background:#f3f4ff;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0 0 10px">${WRITING_PROMPTS[S.student.prevGrade]}</p>
@@ -1434,10 +1514,10 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
 
 fbAuth.onAuthStateChanged(function(user){
   _unsub.forEach(u=>{try{u()}catch(e){}}); _unsub=[];
-  if(!user){ AUTH=null; CACHE={assignments:[]}; S=freshState(); render(); return; }
+  if(!user){ AUTH=null; CACHE={assignments:[],classes:[],tests:[]}; S=freshState(); render(); return; }
   db.collection("users").doc(user.uid).get().then(doc=>{
     AUTH=Object.assign({uid:user.uid,email:(user.email||"").toLowerCase()}, doc.exists?doc.data():{role:"student",name:user.email});
-    CACHE={assignments:[]};
+    CACHE={assignments:[],classes:[],tests:[]};
     startListeners();
     if(AUTH.role==="student") loadStateForUser();
     render();
