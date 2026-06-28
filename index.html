@@ -131,6 +131,9 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>try{if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}catch(e){}</script>
 <script>
 /* ============================================================
    MASAR — app logic; curriculum lives in curriculum.js.
@@ -469,12 +472,16 @@ function parseImport(text, areas){
   var lines=(text||"").split(/\r?\n/), out=[], warnings=[], cur=null;
   function isOpt(l){ return /^\s*(\*|[\-•]|[A-Za-z][\.\)])\s+/.test(l); }
   var skillRe=/^\s*\[\s*skill\s*:\s*(.+?)\s*\]\s*$/i;
+  var ansRe=/^\s*(answer|ans|correct|key)\s*[:\-]\s*(.+?)\s*$/i;
+  function setAnswer(q,val){ if(/^[A-Za-z]$/.test(val)){ var idx=val.toUpperCase().charCodeAt(0)-65; if(idx>=0&&idx<q.options.length)q.answer=idx; return; } for(var k=0;k<q.options.length;k++){ if(q.options[k].toLowerCase()===val.toLowerCase()){q.answer=k;return;} } var m=val.match(/^[A-Za-z][\.\)]\s*(.+)$/); if(m)setAnswer(q,m[1].trim()); }
   function finalize(){ if(cur){ if(cur.options.length>=2){ if(cur.answer<0){ cur.answer=0; warnings.push('"'+cur.q.slice(0,32)+'…": no correct option marked with *, used the first option.'); } out.push(cur); } else if(cur.q){ warnings.push('"'+cur.q.slice(0,32)+'…": needs at least 2 options — skipped.'); } } cur=null; }
   for(var i=0;i<lines.length;i++){
     var line=lines[i].replace(/\s+$/,"");
     if(!line.trim()){ continue; }
     var sm=line.match(skillRe);
     if(sm && cur){ cur.skill=sm[1].trim(); continue; }
+    var am=line.match(ansRe);
+    if(am && cur && cur.options.length){ setAnswer(cur, am[2].trim()); continue; }
     if(cur && isOpt(line)){
       var t=line.trim(), correct=false;
       if(/^\*/.test(t)){ correct=true; t=t.replace(/^\*\s*/,""); }
@@ -492,14 +499,54 @@ function parseImport(text, areas){
   for(var j=0;j<out.length;j++){ if(!out[j].skill || areas.indexOf(out[j].skill)<0){ out[j].skill=areas[j%areas.length]; } }
   return {questions:out, warnings:warnings};
 }
-function previewImport(){
+var IMPORTED=null;
+function handleImportFile(input){
+  var f=input.files && input.files[0]; if(!f)return;
   var subj=document.getElementById("imp_subject").value;
-  var res=parseImport(document.getElementById("imp_text").value, skillsFor(subj));
+  var nm=(f.name||"").toLowerCase();
+  var prev=document.getElementById("imp_preview"); if(prev) prev.innerHTML='<p class="muted" style="font-size:13px">Reading <b>'+(f.name||"file").replace(/</g,"&lt;")+'</b>…</p>';
+  var titleEl=document.getElementById("imp_title"); if(titleEl && !titleEl.value){ titleEl.value=(f.name||"").replace(/\.(pdf|docx?)$/i,""); }
+  var fail=function(m){ var p=document.getElementById("imp_preview"); if(p) p.innerHTML='<div class="notice">Could not read this file'+(m?(": "+m):"")+'. Please upload a <b>.pdf</b> or <b>.docx</b> file.</div>'; };
+  var reader=new FileReader();
+  reader.onerror=function(){ fail("the file could not be opened"); };
+  reader.onload=function(){
+    var buf=reader.result;
+    try{
+      if(nm.endsWith(".pdf") || f.type==="application/pdf"){
+        extractPdfText(buf).then(function(t){finishImport(t,subj);}).catch(function(e){fail((e&&e.message)||e);});
+      } else if(nm.endsWith(".docx")){
+        if(typeof mammoth==="undefined"){ fail("the Word reader didn't load — check your internet and try again"); return; }
+        mammoth.extractRawText({arrayBuffer:buf}).then(function(r){finishImport((r&&r.value)||"",subj);}).catch(function(e){fail((e&&e.message)||e);});
+      } else if(nm.endsWith(".doc")){
+        fail("the old .doc format isn't supported — please re-save as .docx or PDF");
+      } else { fail("unsupported file type"); }
+    }catch(e){ fail((e&&e.message)||e); }
+  };
+  reader.readAsArrayBuffer(f);
+}
+function extractPdfText(buf){
+  if(typeof pdfjsLib==="undefined") return Promise.reject(new Error("the PDF reader didn't load — check your internet"));
+  return pdfjsLib.getDocument({data:buf}).promise.then(function(pdf){
+    var pages=[], chain=Promise.resolve();
+    for(var p=1;p<=pdf.numPages;p++){ (function(pn){ chain=chain.then(function(){ return pdf.getPage(pn).then(function(pg){ return pg.getTextContent().then(function(tc){ pages.push(reconstructLines(tc.items)); }); }); }); })(p); }
+    return chain.then(function(){ return pages.join("\n"); });
+  });
+}
+function reconstructLines(items){
+  var rows={};
+  items.forEach(function(it){ var y=Math.round((it.transform&&it.transform[5])||0), x=(it.transform&&it.transform[4])||0; (rows[y]=rows[y]||[]).push({x:x,s:it.str||""}); });
+  var ys=Object.keys(rows).map(Number).sort(function(a,b){return b-a;});
+  return ys.map(function(y){ return rows[y].sort(function(a,b){return a.x-b.x;}).map(function(o){return o.s;}).join(" ").replace(/\s+/g," ").trim(); }).filter(function(l){return l;}).join("\n");
+}
+function finishImport(text, subj){ IMPORTED=parseImport(text, skillsFor(subj)); IMPORTED.raw=text; renderImportPreview(); }
+function reparseImport(subj){ if(IMPORTED && IMPORTED.raw!=null){ finishImport(IMPORTED.raw, subj); } }
+function renderImportPreview(){
   var el=document.getElementById("imp_preview"); if(!el)return;
-  if(!res.questions.length){ el.innerHTML='<p class="muted" style="font-size:13px">No questions detected yet — paste in the format shown above, then Preview.</p>'; return; }
-  var html='<p style="font-size:13px;margin:0 0 8px"><b>'+res.questions.length+' question(s) detected.</b></p>';
-  html+=res.questions.slice(0,6).map(function(qq,i){ return '<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px"><b>Q'+(i+1)+'.</b> '+qq.q.replace(/</g,"&lt;")+' <span class="tag">'+qq.skill+'</span><div style="margin-top:4px">'+qq.options.map(function(o,oi){ return (oi===qq.answer?'✅ ':'• ')+o.replace(/</g,"&lt;"); }).join('<br>')+'</div></div>'; }).join("");
-  if(res.questions.length>6) html+='<p class="muted" style="font-size:12px">…and '+(res.questions.length-6)+' more.</p>';
+  if(!IMPORTED || !IMPORTED.questions.length){ el.innerHTML='<div class="notice">No questions could be detected in this file. Make sure it follows the format above — one question per line, each option on its own line, and the correct answer marked with a leading <b>*</b> or an <b>Answer:</b> line.</div>'; return; }
+  var res=IMPORTED;
+  var html='<p style="font-size:13px;margin:0 0 8px"><b>'+res.questions.length+' question(s) detected.</b> Review below, then Save.</p>';
+  html+=res.questions.slice(0,8).map(function(qq,i){ return '<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px"><b>Q'+(i+1)+'.</b> '+qq.q.replace(/</g,"&lt;")+' <span class="tag">'+qq.skill+'</span><div style="margin-top:4px">'+qq.options.map(function(o,oi){ return (oi===qq.answer?'✅ ':'• ')+o.replace(/</g,"&lt;"); }).join('<br>')+'</div></div>'; }).join("");
+  if(res.questions.length>8) html+='<p class="muted" style="font-size:12px">…and '+(res.questions.length-8)+' more.</p>';
   if(res.warnings.length) html+='<div class="notice" style="margin-top:8px">⚠ '+res.warnings.length+' note(s):<br>'+res.warnings.map(function(w){return "• "+w.replace(/</g,"&lt;");}).join("<br>")+'</div>';
   el.innerHTML=html;
 }
@@ -508,11 +555,10 @@ function saveImportedTest(){
   var subj=document.getElementById("imp_subject").value, grade=document.getElementById("imp_grade").value;
   var msg=document.getElementById("imp_msg");
   if(!title){ msg.style.color="var(--red)"; msg.textContent="Give your test a name."; return; }
-  var res=parseImport(document.getElementById("imp_text").value, skillsFor(subj));
-  if(!res.questions.length){ msg.style.color="var(--red)"; msg.textContent="No questions detected — check the format and Preview first."; return; }
+  if(!IMPORTED || !IMPORTED.questions.length){ msg.style.color="var(--red)"; msg.textContent="Upload a PDF or Word file first — no questions detected yet."; return; }
   msg.style.color="var(--muted)"; msg.textContent="Saving…";
-  db.collection("tests").add({teacherUid:AUTH.uid, title:title, subject:subj, grade:grade, questions:res.questions, createdAt:Date.now()})
-    .then(function(){ var m=document.getElementById("imp_msg"); if(m){ m.style.color="var(--ok)"; m.textContent="Saved “"+title+"” ("+res.questions.length+" questions). Assign it under “Assign & share”."; } })
+  db.collection("tests").add({teacherUid:AUTH.uid, title:title, subject:subj, grade:grade, questions:IMPORTED.questions, createdAt:Date.now()})
+    .then(function(){ var m=document.getElementById("imp_msg"); if(m){ m.style.color="var(--ok)"; m.textContent="Saved “"+title+"” ("+IMPORTED.questions.length+" questions). Assign it under “Assign & share”."; } IMPORTED=null; })
     .catch(function(e){ var m=document.getElementById("imp_msg"); if(m){ m.style.color="var(--red)"; m.textContent=fbErr(e); } });
 }
 function deleteTest(id){ if(!confirm("Delete this imported test? Diagnostics already assigned with it are not affected."))return; db.collection("tests").doc(id).delete().catch(function(e){alert(fbErr(e));}); }
@@ -520,16 +566,16 @@ function importCard(){
   var grades=GRADES.map(function(g){return '<option value="'+g.id+'">'+g.label+'</option>';}).join("");
   var ts=teacherTests();
   var list=ts.length? '<table><thead><tr><th>Test</th><th>Subject</th><th>Grade</th><th>Qs</th><th></th></tr></thead><tbody>'+ts.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).map(function(t){ return '<tr><td><b>'+(t.title||"Untitled")+'</b></td><td>'+subjChip(t.subject)+'</td><td>'+gLabel(t.grade)+'</td><td>'+((t.questions||[]).length)+'</td><td><button class="btn ghost sm" onclick="deleteTest(\''+t.id+'\')">Delete</button></td></tr>'; }).join("")+'</tbody></table>' : '<p class="muted" style="font-size:13px">No imported tests yet — paste one below.</p>';
-  return '<div class="card"><h2>⚡ Quick import — use your own test</h2><p class="sub">Paste a test you wrote and Adeptly turns it into an online diagnostic. Then assign it under “Assign &amp; share”.</p>'
+  return '<div class="card"><h2>⚡ Quick import — upload your own test</h2><p class="sub">Upload a PDF or Word file of a test you wrote and Adeptly turns it into an online diagnostic automatically. Then assign it under “Assign &amp; share”.</p>'
     + list
     + '<h3 style="font-size:14px;margin:18px 0 6px">Import a new test</h3>'
     + '<div class="row"><div class="col"><label>Test name</label><input id="imp_title" placeholder="e.g. Grade 7 Algebra check"></div>'
-    + '<div class="col"><label>Subject</label><select id="imp_subject"><option value="English">English</option><option value="Math">Mathematics</option></select></div>'
+    + '<div class="col"><label>Subject</label><select id="imp_subject" onchange="reparseImport(this.value)"><option value="English">English</option><option value="Math">Mathematics</option></select></div>'
     + '<div class="col"><label>Grade it tests</label><select id="imp_grade">'+grades+'</select></div></div>'
-    + '<label style="margin-top:10px">Paste your questions</label>'
-    + '<textarea id="imp_text" rows="9" placeholder="1. What is 12 × 8?&#10;- 84&#10;* 96&#10;- 108&#10;[skill: Number &amp; Operations]&#10;&#10;2. Which word is a noun?&#10;- quickly&#10;* river&#10;- bright" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:13px;font-family:ui-monospace,Menlo,monospace;resize:vertical"></textarea>'
-    + '<p class="muted" style="font-size:11px;margin:6px 0 0">Format: each question on its own line (numbering optional). List options below it — mark the <b>correct</b> one with a leading <b>*</b>, the others with <b>-</b>. Optional <b>[skill: …]</b> line tags the skill (Reading, Writing, Vocabulary, Grammar, or a Maths strand); untagged questions are spread across skills automatically. Separate questions with a blank line.</p>'
-    + '<div style="margin-top:10px"><button class="btn ghost" onclick="previewImport()">Preview</button> <button class="btn" onclick="saveImportedTest()">Save test</button> <span id="imp_msg" style="font-size:12px;color:var(--ok)"></span></div>'
+    + '<label style="margin-top:10px">Upload your test file (PDF or Word .docx)</label>'
+    + '<input type="file" id="imp_file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onchange="handleImportFile(this)" style="width:100%;padding:14px;border:1px dashed var(--green);border-radius:10px;font-size:13px;background:#f3f4ff;cursor:pointer">'
+    + '<p class="muted" style="font-size:11px;margin:6px 0 0">Adeptly reads your file and builds the questions automatically. For best results, format each question on its own line with each option on a separate line below it, and mark the <b>correct answer</b> with a leading <b>*</b> (e.g. <code>* 96</code>) <i>or</i> an <b>Answer:</b> line (e.g. <code>Answer: B</code>). An optional <b>[skill: …]</b> line tags the skill; untagged questions are spread across skills automatically. If no answer is marked, the first option is used and flagged so you can fix it.</p>'
+    + '<div style="margin-top:10px"><button class="btn" onclick="saveImportedTest()">Save test</button> <span id="imp_msg" style="font-size:12px;color:var(--ok)"></span></div>'
     + '<div id="imp_preview" style="margin-top:12px"></div>'
     + '</div>';
 }
